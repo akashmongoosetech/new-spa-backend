@@ -1,0 +1,9 @@
+node_modules
+uploads/*
+!uploads/.gitkeep
+database/*.sqlite
+.env
+*.log
+run_err.txt
+run_out.txt
+smoke-test-results.txt
