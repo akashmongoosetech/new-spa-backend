@@ -1,6 +1,9 @@
 import { Router } from 'express';
-import { handleAiChat } from '../controllers/aiController.js';
+import aiController from '../controllers/aiController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
 
 const router = Router();
-router.post('/chat', handleAiChat);
+
+router.post('/chat', asyncHandler(aiController.chatHandler));
+
 export default router;

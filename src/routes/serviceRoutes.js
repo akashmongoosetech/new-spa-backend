@@ -1,15 +1,14 @@
 import { Router } from 'express';
-import { getServices, getServiceById, createService, updateService, deleteService } from '../controllers/serviceController.js';
-import { authenticateJwt } from '../middleware/authMiddleware.js';
-import { authorizeRoles } from '../middleware/roleMiddleware.js';
+import serviceController from '../controllers/serviceController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validateObjectId from '../middleware/validateObjectId.js';
 
 const router = Router();
-const adminOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin')];
 
-router.get('/', getServices);
-router.get('/:id', getServiceById);
-router.post('/', adminOnly, createService);
-router.put('/:id', adminOnly, updateService);
-router.delete('/:id', adminOnly, deleteService);
+router.get('/', asyncHandler(serviceController.listServices));
+router.post('/', protect, authorize('Super Admin', 'Admin', 'Manager'), asyncHandler(serviceController.createService));
+router.put('/:id', protect, authorize('Super Admin', 'Admin', 'Manager'), validateObjectId('id'), asyncHandler(serviceController.updateService));
+router.delete('/:id', protect, authorize('Super Admin', 'Admin', 'Manager'), validateObjectId('id'), asyncHandler(serviceController.deleteService));
 
 export default router;

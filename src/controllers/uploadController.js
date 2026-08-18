@@ -1,19 +1,20 @@
-import { sendError, handleError } from '../utils/responseHandler.js';
+import { publicUrl } from '../middleware/upload.js';
+import { HttpError } from '../utils/api.js';
+import { logAudit } from '../services/auditService.js';
 
-export const handleSingleUpload = (req, res) => {
-  try {
-    if (!req.file) {
-      return sendError(res, 'No file uploaded', 400);
-    }
-    const fileUrl = `/uploads/${req.file.filename}`;
-    return res.json({
-      url: fileUrl,
-      filename: req.file.filename,
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size
-    });
-  } catch (err) {
-    return handleError(res, err);
+export function uploadFile(req, res) {
+  if (!req.file) {
+    throw new HttpError(400, 'No file uploaded — use multipart/form-data with field "file"');
   }
-};
+  const file = req.file;
+  logAudit({ action: 'upload', module: 'uploads', details: `Uploaded ${file.originalname} (${file.mimetype})`, req });
+  return res.status(201).json({
+    url: publicUrl(file.filename),
+    filename: file.filename,
+    originalname: file.originalname,
+    mimetype: file.mimetype,
+    size: file.size,
+  });
+}
+
+export default { uploadFile };

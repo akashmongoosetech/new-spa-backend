@@ -1,59 +1,124 @@
-import { GoogleGenAI } from '@google/genai';
+import env from '../config/env.js';
+import Service from '../models/Service.js';
+import Setting from '../models/Setting.js';
 
-let aiClient = null;
-
-function getAiClient() {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY environment variable is missing');
-    }
-    aiClient = new GoogleGenAI({ apiKey });
-  }
-  return aiClient;
+function businessContext(settings) {
+  return {
+    name: settings.businessName || 'Aura Luxe Spa & Wellness',
+    address: settings.address || '',
+    city: settings.city || '',
+    phone: settings.phone || '',
+    email: settings.email || '',
+    workingHours: settings.workingHours || '',
+    currency: settings.currencyCode || 'INR',
+    currencySymbol: settings.currencySymbol || '₹',
+  };
 }
 
-export async function processAiChat(message, history = []) {
+function serviceList(services) {
+  return services.map((s) => ({
+    name: s.title,
+    category: s.category || '',
+    price: s.price,
+    duration: `${s.durationMinutes || 60} min`,
+    shortDescription: s.shortDescription || '',
+  }));
+}
+
+async function buildContext() {
+  const settings = (await Setting.findOne({ key: 'default' }).lean()) || {};
+  const services = await Service.find({ active: { $ne: false } }).select(
+    'title category price durationMinutes shortDescription'
+  ).lean();
+  return { biz: businessContext(settings), services: serviceList(services) };
+}
+
+function curatedReply(question, { biz, services }) {
+  const q = String(question || '').toLowerCase();
+  const priceMatch = services.find((s) => q.includes(s.name.toLowerCase().split(' ')[0]));
+  if (priceMatch) {
+    return `${priceMatch.name} is available at ${biz.currencySymbol}${priceMatch.price} (${priceMatch.duration}) — ${priceMatch.shortDescription || ''}\n\nTo reserve a slot, use the Book Now form or call us at ${biz.phone}.`;
+  }
+  if (q.includes('price') || q.includes('cost') || q.includes('rate')) {
+    const cheap = services.filter((s) => s.price <= 500);
+    return `Our treatments start from ${biz.currencySymbol}${cheap[0] ? cheap[0].price : 500}. Popular options: ${services.slice(0, 4).map((s) => `${s.name} (${biz.currencySymbol}${s.price})`).join(', ')}. Visit the Services page for the full menu.`;
+  }
+  if (q.includes('hour') || q.includes('timing') || q.includes('open') || q.includes('close')) {
+    return `We are open ${biz.workingHours}. You can book online anytime or call ${biz.phone}.`;
+  }
+  if (q.includes('location') || q.includes('address') || q.includes('where')) {
+    return `You'll find us at ${biz.address}, ${biz.city}. Directions: ${'https://maps.google.com/?q=' + encodeURIComponent(biz.address)}`;
+  }
+  if (q.includes('appointment') || q.includes('book') || q.includes('reserve')) {
+    return `Booking is easy — pick a service, choose your preferred date & time slot on the Book Now page, and confirm. Prefer personal help? Call ${biz.phone} and our concierge will set it up.`;
+  }
+  if (q.includes('contact') || q.includes('call') || q.includes('phone') || q.includes('email')) {
+    return `You can reach us at ${biz.phone} or ${biz.email}. For the fastest response, use the Contact form on our website.`;
+  }
+  if (q.includes('discount') || q.includes('coupon') || q.includes('offer')) {
+    return `We run seasonal offers and coupon codes. Enter any coupon at checkout on the Booking page, or ask us on ${biz.phone} about current promotions.`;
+  }
+  const top = services.slice(0, 3).map((s) => s.name).join(', ');
+  return `Welcome to ${biz.name}! We specialise in ${top}. How can I help — pricing, timings, booking, or directions?`;
+}
+
+/**
+ * Answer as the spa assistant.
+ * Uses Gemini when GEMINI_API_KEY is configured; otherwise returns a curated
+ * reply built from the live services + settings data (safe fallback).
+ */
+export async function chat(message, history = []) {
+  const ctx = await buildContext();
+
+  if (!env.gemini.apiKey) {
+    return { reply: curatedReply(message, ctx), source: 'fallback' };
+  }
+
+  const systemPrompt = `You are the friendly concierge assistant for ${ctx.biz.name}, a men's spa & wellness studio.
+
+You MUST answer ONLY using the business information provided below. Never invent prices, services, or policies that are not in this data. Keep replies warm, concise (under ~120 words), and helpful. When a user wants to book, point them to the Book Now flow or the phone number.
+
+BUSINESS INFO:
+${JSON.stringify(ctx.biz, null, 2)}
+
+SERVICE MENU:
+${JSON.stringify(ctx.services, null, 2)}`;
+
+  const messages = [{ role: 'user', parts: [{ text: systemPrompt }] }];
+  const convo = history && Array.isArray(history) ? history : [];
+  for (const h of convo.slice(-6)) {
+    const role = h.role === 'assistant' || h.role === 'model' ? 'model' : 'user';
+    messages.push({ role, parts: [{ text: h.content || h.text || '' }] });
+  }
+  messages.push({ role: 'user', parts: [{ text: String(message || '') }] });
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.gemini.model}:generateContent?key=${env.gemini.apiKey}`;
+
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return {
-        reply: `Namaste! Welcome to Aura Luxe Spa Concierge in Bandra West, Mumbai. How may I assist you with your booking today? Our certified male therapists offer Swedish, Deep Tissue, Kerala Abhyanga, and Volcanic Hot Stone therapies.`
-      };
-    }
-
-    const ai = getAiClient();
-    const systemInstruction = `You are Aura Luxe Spa's AI Assistant, located in Bandra West, Mumbai.
-You provide courteous, helpful answers about Aura Luxe's Men-to-Men massage therapy and wellness spa services.
-Key facts:
-- Services: Swedish Relaxation (₹1,999), Deep Tissue Recovery (₹2,499), Kerala Ayurvedic Abhyanga (₹2,799), Volcanic Hot Stone (₹2,999).
-- Location: Plot 42, Bandra Reclamation, Bandra West, Mumbai 400050.
-- Certified male therapists: Rajesh Varma, Vikram Malhotra, Arjun Nair.
-- Timing: Mon - Sun 09:00 AM - 10:00 PM IST.
-Be warm, professional, concise, and helpful.`;
-
-    const contents = [
-      ...history.map(h => ({
-        role: h.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: h.text }]
-      })),
-      { role: 'user', parts: [{ text: message }] }
-    ];
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents,
-      config: {
-        systemInstruction,
-        temperature: 0.7
-      }
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: messages }),
+      signal: AbortSignal.timeout(15000),
     });
 
-    return { reply: response.text || "Thank you for reaching out to Aura Luxe Spa." };
+    if (!resp.ok) {
+      console.error(`[ai] Gemini HTTP ${resp.status}`);
+      return { reply: curatedReply(message, ctx), source: 'fallback' };
+    }
+
+    const data = await resp.json();
+    const text =
+      data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join(' ').trim() ||
+      '';
+    if (!text) {
+      return { reply: curatedReply(message, ctx), source: 'fallback' };
+    }
+    return { reply: text, source: 'gemini' };
   } catch (err) {
-    console.error("AI service error:", err.message);
-    return {
-      reply: `Welcome to Aura Luxe Spa Concierge! Our Bandra West sanctuary is open daily from 9:00 AM to 10:00 PM. How may we assist you with your massage therapy booking?`
-    };
+    console.error('[ai] Gemini call failed:', err.message);
+    return { reply: curatedReply(message, ctx), source: 'fallback' };
   }
 }
+
+export default { chat };

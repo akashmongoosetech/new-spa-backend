@@ -1,16 +1,17 @@
 import { Router } from 'express';
-import { getBlogs, getBlogBySlug, createBlog, updateBlog, deleteBlog, addBlogComment } from '../controllers/blogController.js';
-import { authenticateJwt } from '../middleware/authMiddleware.js';
-import { authorizeRoles } from '../middleware/roleMiddleware.js';
+import blogController from '../controllers/blogController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validateObjectId from '../middleware/validateObjectId.js';
 
 const router = Router();
-const adminOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin')];
 
-router.get('/', getBlogs);
-router.get('/:slug', getBlogBySlug);
-router.post('/', adminOnly, createBlog);
-router.put('/:id', adminOnly, updateBlog);
-router.delete('/:id', adminOnly, deleteBlog);
-router.post('/:id/comments', adminOnly, addBlogComment);
+// Public (published only unless admin requests all)
+router.get('/', asyncHandler(blogController.listBlogs));
+
+// Admin
+router.post('/', protect, authorize('Super Admin', 'Admin'), asyncHandler(blogController.createBlog));
+router.put('/:id', protect, authorize('Super Admin', 'Admin'), validateObjectId('id'), asyncHandler(blogController.updateBlog));
+router.delete('/:id', protect, authorize('Super Admin', 'Admin'), validateObjectId('id'), asyncHandler(blogController.deleteBlog));
 
 export default router;

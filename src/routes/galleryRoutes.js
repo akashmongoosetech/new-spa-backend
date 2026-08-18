@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { getGallery, createGalleryItem, deleteGalleryItem } from '../controllers/galleryController.js';
-import { authenticateJwt } from '../middleware/authMiddleware.js';
-import { authorizeRoles } from '../middleware/roleMiddleware.js';
+import galleryController from '../controllers/galleryController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validateObjectId from '../middleware/validateObjectId.js';
 
 const router = Router();
-const adminOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin')];
 
-router.get('/', getGallery);
-router.post('/', adminOnly, createGalleryItem);
-router.delete('/:id', adminOnly, deleteGalleryItem);
+router.get('/', asyncHandler(galleryController.listGallery));
+router.post('/', protect, authorize('Super Admin', 'Admin'), asyncHandler(galleryController.createGalleryItem));
+router.delete('/:id', protect, authorize('Super Admin', 'Admin'), validateObjectId('id'), asyncHandler(galleryController.deleteGalleryItem));
 
 export default router;

@@ -1,29 +1,15 @@
-import { AuditModel } from '../models/AuditModel.js';
-import { sendError, handleError } from '../utils/responseHandler.js';
+import SystemAuditLog from '../models/SystemAuditLog.js';
+import LoginActivity from '../models/LoginActivity.js';
+import { serializeAuditLog, serializeLoginActivity } from '../utils/serializers.js';
 
-export const getAuditLogs = (req, res) => {
-  try {
-    const logs = AuditModel.getAuditLogs();
-    return res.json(logs);
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
+export async function listAuditLogs(req, res) {
+  const logs = await SystemAuditLog.find().sort({ timestamp: -1 }).limit(500).lean();
+  return res.json(logs.map(serializeAuditLog));
+}
 
-export const getLoginActivities = (req, res) => {
-  try {
-    const activities = AuditModel.getLoginActivities();
-    return res.json(activities);
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
+export async function listLoginActivities(req, res) {
+  const logs = await LoginActivity.find().sort({ timestamp: -1 }).limit(500).lean();
+  return res.json(logs.map(serializeLoginActivity));
+}
 
-export const getEmailLogs = (req, res) => {
-  try {
-    const logs = AuditModel.getEmailLogs();
-    return res.json(logs);
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
+export default { listAuditLogs, listLoginActivities };

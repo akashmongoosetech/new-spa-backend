@@ -1,68 +1,89 @@
-import { v4 as uuidv4 } from 'uuid';
-import { CouponModel } from '../models/CouponModel.js';
-import { sendError, sendSuccess, handleError } from '../utils/responseHandler.js';
+import Coupon from '../models/Coupon.js';
+import { serializeCoupon } from '../utils/serializers.js';
+import { HttpError } from '../utils/api.js';
+import { logAudit } from '../services/auditService.js';
 
-export const getCoupons = (req, res) => {
-  try {
-    const coupons = CouponModel.getAll();
-    return res.json(coupons);
-  } catch (err) {
-    return handleError(res, err);
+function computeDiscount(coupon, amount) {
+  if (coupon.discountType === 'percent') {
+    return Math.round(((amount * coupon.discount) / 100) * 100) / 100;
   }
-};
+  return Math.min(coupon.discount, amount);
+}
 
-export const validateCoupon = (req, res) => {
-  try {
-    const { code, amount } = req.body;
-    if (!code) return sendError(res, 'Coupon code is required', 400);
+export async function validateCoupon(req, res) {
+  const { code, amount } = req.body || {};
+  if (!code) throw new HttpError(400, 'Coupon code is required');
 
-    const coupon = CouponModel.findByCode(code);
-    if (!coupon) return sendError(res, 'Invalid coupon code', 404);
-    if (!coupon.active) return sendError(res, 'Coupon code is inactive', 400);
+  const coupon = await Coupon.findOne({ code: String(code).toUpperCase().trim() });
+  if (!coupon) {
+    return res.json({ valid: false, discountAmount: 0, message: 'Invalid coupon code', coupon: null });
+  }
+  if (coupon.active === false) {
+    return res.json({ valid: false, discountAmount: 0, message: 'This coupon is no longer active', coupon: null });
+  }
+  if (coupon.expiryDate && new Date(coupon.expiryDate) < new Date()) {
+    return res.json({ valid: false, discountAmount: 0, message: 'This coupon has expired', coupon: null });
+  }
+  if (coupon.usageCount >= coupon.maxUses) {
+    return res.json({ valid: false, discountAmount: 0, message: 'This coupon has reached its usage limit', coupon: null });
+  }
 
-    if (amount && coupon.minAmount && amount < coupon.minAmount) {
-      return sendError(res, `Minimum order amount of ₹${coupon.minAmount} required for this coupon`, 400);
-    }
-
-    let discountAmount = coupon.discount;
-    if (coupon.discountType === 'percent' && amount) {
-      discountAmount = Math.round((amount * coupon.discount) / 100);
-    }
-
+  const amt = Number(amount) || 0;
+  if (amt < (coupon.minAmount || 0)) {
     return res.json({
-      valid: true,
-      coupon,
-      discountAmount
+      valid: false,
+      discountAmount: 0,
+      message: `Minimum order amount for this coupon is ₹${coupon.minAmount}`,
+      coupon: null,
     });
-  } catch (err) {
-    return handleError(res, err);
   }
-};
 
-export const createCoupon = (req, res) => {
-  try {
-    const { code, discount, discountType, minAmount, expiryDate, maxUses } = req.body;
-    if (!code || !discount) return sendError(res, 'Code and discount value are required', 400);
+  const discountAmount = computeDiscount(coupon, amt);
+  return res.json({
+    valid: true,
+    discountAmount,
+    discount: discountAmount,
+    message: 'Coupon applied',
+    coupon: serializeCoupon(coupon),
+  });
+}
 
-    const id = `cpn-${uuidv4().slice(0, 8)}`;
-    const newCoupon = CouponModel.create({
-      id, code, discount, discountType, minAmount, expiryDate, maxUses
-    });
+export async function listCoupons(req, res) {
+  const coupons = await Coupon.find().sort({ createdAt: -1 }).lean();
+  return res.json(coupons.map(serializeCoupon));
+}
 
-    return res.status(201).json(newCoupon);
-  } catch (err) {
-    if (String(err?.message || '').includes('UNIQUE')) {
-      return sendError(res, 'A coupon with this code already exists', 400);
-    }
-    return handleError(res, err);
-  }
-};
+export async function createCoupon(req, res) {
+  const b = req.body || {};
+  const code = String(b.code || '').toUpperCase().trim();
+  if (!code) throw new HttpError(400, 'Coupon code is required');
+  if (b.discount === undefined) throw new HttpError(400, 'Discount value is required');
 
-export const deleteCoupon = (req, res) => {
-  try {
-    CouponModel.delete(req.params.id);
-    return sendSuccess(res, null, 'Coupon deleted successfully');
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
+  const existing = await Coupon.findOne({ code });
+  if (existing) throw new HttpError(400, 'Coupon code already exists');
+
+  const coupon = await Coupon.create({
+    code,
+    discount: Number(b.discount) || 0,
+    discountType: b.discountType === 'percent' ? 'percent' : 'fixed',
+    minAmount: Number(b.minAmount) || 0,
+    maxUses: Number(b.maxUses) || 100,
+    usageCount: Number(b.usageCount) || 0,
+    expiryDate: b.expiryDate ? new Date(b.expiryDate) : null,
+    active: b.active === false || b.active === 0 ? false : true,
+  });
+
+  await logAudit({ action: 'create', module: 'coupons', details: `Created coupon ${coupon.code}`, req });
+  return res.status(201).json(serializeCoupon(coupon.toObject()));
+}
+
+export async function deleteCoupon(req, res) {
+  const coupon = await Coupon.findById(req.params.id);
+  if (!coupon) throw new HttpError(404, 'Coupon not found');
+
+  await coupon.deleteOne();
+  await logAudit({ action: 'delete', module: 'coupons', details: `Deleted coupon ${coupon.code}`, req });
+  return res.json({ success: true });
+}
+
+export default { validateCoupon, listCoupons, createCoupon, deleteCoupon };

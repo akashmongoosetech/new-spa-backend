@@ -1,39 +1,33 @@
-import { NotificationModel } from '../models/NotificationModel.js';
-import { sendError, sendSuccess, handleError } from '../utils/responseHandler.js';
+import { serializeNotification } from '../utils/serializers.js';
+import {
+  listNotifications,
+  markRead,
+  markAllRead,
+  deleteNotification,
+} from '../services/notificationService.js';
+import { HttpError } from '../utils/api.js';
 
-export const getNotifications = (req, res) => {
-  try {
-    const notifications = NotificationModel.getAll();
-    const unreadCount = NotificationModel.getUnreadCount();
-    return res.json({ notifications, unreadCount });
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
+export async function getNotifications(req, res) {
+  const { docs, unreadCount } = await listNotifications({ limit: 100 });
+  return res.json({
+    notifications: docs.map(serializeNotification),
+    unreadCount,
+  });
+}
 
-export const markNotificationRead = (req, res) => {
-  try {
-    NotificationModel.markRead(req.params.id);
-    return sendSuccess(res, null, 'Notification marked as read');
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
+export async function markNotificationRead(req, res) {
+  await markRead(req.params.id);
+  return res.json({ success: true });
+}
 
-export const markAllNotificationsRead = (req, res) => {
-  try {
-    NotificationModel.markAllRead();
-    return sendSuccess(res, null, 'All notifications marked as read');
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
+export async function markAllNotificationsRead(req, res) {
+  const { modifiedCount } = await markAllRead();
+  return res.json({ success: true, modifiedCount });
+}
 
-export const deleteNotification = (req, res) => {
-  try {
-    NotificationModel.delete(req.params.id);
-    return sendSuccess(res, null, 'Notification deleted');
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
+export async function deleteNotificationItem(req, res) {
+  await deleteNotification(req.params.id);
+  return res.json({ success: true });
+}
+
+export default { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotificationItem, HttpError };

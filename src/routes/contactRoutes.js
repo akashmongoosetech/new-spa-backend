@@ -1,21 +1,23 @@
 import { Router } from 'express';
-import {
-  getContacts, createContact, replyContact, updateContactStatus,
-  deleteContact, bulkDeleteContacts
-} from '../controllers/contactController.js';
-import { authenticateJwt } from '../middleware/authMiddleware.js';
-import { authorizeRoles } from '../middleware/roleMiddleware.js';
+import contactController from '../controllers/contactController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validateObjectId from '../middleware/validateObjectId.js';
+import { contactLimiter } from '../config/rateLimiters.js';
 
 const router = Router();
 
-const staffOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin', 'Manager', 'Receptionist')];
-const adminOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin')];
+// Public
+router.post('/', contactLimiter, asyncHandler(contactController.createContact));
 
-router.get('/', staffOnly, getContacts);
-router.post('/', createContact);
-router.put('/:id', staffOnly, updateContactStatus);
-router.post('/:id/reply', staffOnly, replyContact);
-router.post('/bulk-delete', adminOnly, bulkDeleteContacts);
-router.delete('/:id', adminOnly, deleteContact);
+// Admin (all staff roles can manage messages)
+router.use(protect);
+router.use(authorize('Super Admin', 'Admin', 'Manager', 'Receptionist'));
+
+router.get('/', asyncHandler(contactController.listContacts));
+router.put('/:id', validateObjectId('id'), asyncHandler(contactController.updateContact));
+router.post('/:id/reply', validateObjectId('id'), asyncHandler(contactController.replyContact));
+router.delete('/:id', validateObjectId('id'), asyncHandler(contactController.deleteContact));
+router.post('/bulk-delete', asyncHandler(contactController.bulkDeleteContacts));
 
 export default router;

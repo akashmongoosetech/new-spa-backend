@@ -1,13 +1,20 @@
 import { Router } from 'express';
-import { getSubscribers, subscribeNewsletter, deleteSubscriber } from '../controllers/newsletterController.js';
-import { authenticateJwt } from '../middleware/authMiddleware.js';
-import { authorizeRoles } from '../middleware/roleMiddleware.js';
+import newsletterController from '../controllers/newsletterController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validateObjectId from '../middleware/validateObjectId.js';
+import { newsletterLimiter } from '../config/rateLimiters.js';
 
 const router = Router();
-const staffOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin', 'Manager')];
 
-router.get('/', staffOnly, getSubscribers);
-router.post('/', subscribeNewsletter);
-router.delete('/:id', staffOnly, deleteSubscriber);
+// Public
+router.post('/', newsletterLimiter, asyncHandler(newsletterController.subscribe));
+
+// Admin
+router.use(protect);
+router.use(authorize('Super Admin', 'Admin', 'Manager'));
+
+router.get('/', asyncHandler(newsletterController.listSubscribers));
+router.delete('/:id', validateObjectId('id'), asyncHandler(newsletterController.deleteSubscriber));
 
 export default router;

@@ -1,219 +1,206 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
-import { UserModel } from '../models/UserModel.js';
-import { AuditModel } from '../models/AuditModel.js';
-import { JWT_CONFIG } from '../config/jwt.js';
-import { sendSuccess, sendError, handleError } from '../utils/responseHandler.js';
-import { sendMail } from '../services/emailService.js';
-import { queryOne, run } from '../config/db.js';
+import AdminUser from '../models/AdminUser.js';
+import Setting from '../models/Setting.js';
+import LoginActivity from '../models/LoginActivity.js';
+import { generateToken, generateResetToken } from '../utils/generateToken.js';
+import { hashPassword, comparePassword } from '../utils/password.js';
+import { serializeAdminUser } from '../utils/serializers.js';
+import { sendPasswordReset } from '../services/emailService.js';
+import { createNotification } from '../services/notificationService.js';
+import { HttpError } from '../utils/api.js';
+import env from '../config/env.js';
 
-const PASSWORD_MIN_LENGTH = 6;
-// Roles that may be self-assigned via open signup. Super Admin can never be
-// obtained through the public signup endpoint.
-const SIGNUP_ALLOWED_ROLES = ['Admin', 'Manager', 'Receptionist'];
-
-function hashToken(token) {
-  return crypto.createHash('sha256').update(token).digest('hex');
+function clientIp(req) {
+  const raw = req.ip || req.headers['x-forwarded-for'] || '';
+  return raw.toString().split(',')[0].trim();
 }
 
-function getFrontendBaseUrl() {
-  const clientUrl = process.env.CLIENT_URL;
-  if (clientUrl) return clientUrl.split(',')[0].trim().replace(/\/$/, '');
-  return 'http://localhost:5173';
+function userAgent(req) {
+  return (req.headers['user-agent'] || '').slice(0, 255);
 }
 
-export const adminLogin = async (req, res) => {
+async function logLogin({ user, req, status }) {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return sendError(res, 'Email and password are required', 400);
-    }
-
-    const user = UserModel.findByEmail(email);
-    if (!user) {
-      AuditModel.logLoginActivity(email, 'failed', req.ip, req.headers['user-agent']);
-      return sendError(res, 'Invalid credentials', 401);
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      AuditModel.logLoginActivity(email, 'failed', req.ip, req.headers['user-agent']);
-      return sendError(res, 'Invalid credentials', 401);
-    }
-
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name },
-      JWT_CONFIG.secret,
-      { expiresIn: JWT_CONFIG.expiresIn }
-    );
-
-    AuditModel.logLoginActivity(email, 'success', req.ip, req.headers['user-agent']);
-    AuditModel.logAudit(user.name, 'ADMIN_LOGIN', 'User logged in successfully', req.ip);
-
-    res.cookie('token', token, {
-      httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax'
+    await LoginActivity.create({
+      userId: user ? user._id : null,
+      userName: user ? user.name : '',
+      userEmail: user ? user.email : '',
+      email: user ? user.email : '',
+      ipAddress: clientIp(req),
+      status,
+      deviceInfo: userAgent(req),
+      userAgent: userAgent(req),
     });
-
-    return res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        avatar_url: user.avatar_url,
-        phone: user.phone
-      }
-    });
-  } catch (err) {
-    return handleError(res, err);
+  } catch {
+    /* best-effort */
   }
-};
+}
 
-export const adminSignup = async (req, res) => {
-  try {
-    const { name, email, password, role, phone } = req.body;
-    if (!name || !email || !password) {
-      return sendError(res, 'Name, email, and password are required', 400);
-    }
-    if (String(password).length < PASSWORD_MIN_LENGTH) {
-      return sendError(res, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`, 400);
-    }
+async function getMaxAttempts() {
+  const s = await Setting.findOne({ key: 'default' }).lean();
+  return (s && s.maxLoginAttempts) || 5;
+}
 
-    const existing = UserModel.findByEmail(email);
-    if (existing) {
-      return sendError(res, 'User with this email already exists', 400);
-    }
+export async function login(req, res) {
+  const { email, password } = req.body || {};
 
-    // Never allow self-registration as Super Admin.
-    const requestedRole = role || 'Admin';
-    const finalRole = SIGNUP_ALLOWED_ROLES.includes(requestedRole) ? requestedRole : 'Admin';
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const userId = `usr-${uuidv4().slice(0, 8)}`;
-
-    const newUser = UserModel.create({
-      id: userId,
-      name,
-      email,
-      password: hashedPassword,
-      role: finalRole,
-      phone: phone || null
-    });
-
-    AuditModel.logAudit('System', 'USER_SIGNUP', `Created new admin user: ${email} (${finalRole})`, req.ip);
-
-    return res.status(201).json({
-      message: 'Account created successfully',
-      user: newUser
-    });
-  } catch (err) {
-    return handleError(res, err);
+  if (!email || !password) {
+    throw new HttpError(400, 'Email and password are required');
   }
-};
 
-export const getCurrentUser = (req, res) => {
-  try {
-    const user = UserModel.findById(req.user.id);
-    if (!user) return sendError(res, 'User not found', 404);
-    return res.json(user);
-  } catch (err) {
-    return handleError(res, err);
+  const user = await AdminUser.findOne({ email: String(email).toLowerCase().trim() }).select('+password');
+  const maxAttempts = await getMaxAttempts();
+
+  if (!user) {
+    await logLogin({ user: null, req, status: 'failed' });
+    throw new HttpError(401, 'Invalid credentials');
   }
-};
 
-export const forgotPassword = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = UserModel.findByEmail(email);
-    if (user) {
-      const token = crypto.randomBytes(32).toString('hex');
-      const id = `rst-${uuidv4().slice(0, 8)}`;
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-      run(
-        'INSERT INTO password_resets (id, email, token_hash, expires_at, used) VALUES (?, ?, ?, ?, 0)',
-        [id, email, hashToken(token), expiresAt]
-      );
-
-      const resetLink = `${getFrontendBaseUrl()}/reset-password/${token}`;
-      await sendMail({
-        to: email,
-        subject: 'Password Reset Instructions - Aura Luxe Spa',
-        html: `<p>Hello ${user.name},</p><p>You requested a password reset. This link is valid for 1 hour:</p><p><a href="${resetLink}">${resetLink}</a></p><p>If you did not request this, you can safely ignore this email.</p>`
-      });
-    }
-    return sendSuccess(res, null, 'If an account with that email exists, reset instructions have been dispatched.');
-  } catch (err) {
-    return handleError(res, err);
+  if (user.lockoutUntil && user.lockoutUntil > new Date()) {
+    await logLogin({ user, req, status: 'failed' });
+    throw new HttpError(423, 'Account temporarily locked. Try again later.');
   }
-};
 
-export const resetPassword = async (req, res) => {
-  try {
-    const { token, newPassword } = req.body;
-    if (!token || !newPassword) {
-      return sendError(res, 'Reset token and new password are required', 400);
+  const ok = await comparePassword(password, user.password);
+  if (!ok) {
+    user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+    if (user.failedLoginAttempts >= maxAttempts) {
+      user.lockoutUntil = new Date(Date.now() + 15 * 60 * 1000);
+      user.failedLoginAttempts = 0;
     }
-    if (String(newPassword).length < PASSWORD_MIN_LENGTH) {
-      return sendError(res, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`, 400);
-    }
-
-    const tokenHash = hashToken(token);
-    const reset = queryOne(
-      'SELECT * FROM password_resets WHERE token_hash = ? AND used = 0',
-      [tokenHash]
-    );
-
-    if (!reset) {
-      return sendError(res, 'Invalid or already-used reset token', 400);
-    }
-    if (new Date(reset.expires_at).getTime() < Date.now()) {
-      return sendError(res, 'Reset token has expired. Please request a new one.', 400);
-    }
-
-    const user = UserModel.findByEmail(reset.email);
-    if (!user) {
-      return sendError(res, 'Account no longer exists', 404);
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    UserModel.update(user.id, { password: hashedPassword });
-    run('UPDATE password_resets SET used = 1 WHERE id = ?', [reset.id]);
-    AuditModel.logAudit(user.name, 'RESET_PASSWORD', 'Password reset successfully', req.ip);
-
-    return sendSuccess(res, null, 'Password updated successfully');
-  } catch (err) {
-    return handleError(res, err);
+    await user.save();
+    await logLogin({ user, req, status: 'failed' });
+    throw new HttpError(401, 'Invalid credentials');
   }
-};
 
-export const changePassword = async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return sendError(res, 'Current and new password are required', 400);
-    }
-    if (String(newPassword).length < PASSWORD_MIN_LENGTH) {
-      return sendError(res, `New password must be at least ${PASSWORD_MIN_LENGTH} characters`, 400);
-    }
-
-    const userWithPass = UserModel.findByEmail(req.user.email);
-    if (!userWithPass) return sendError(res, 'User not found', 404);
-
-    const isMatch = await bcrypt.compare(currentPassword, userWithPass.password);
-    if (!isMatch) return sendError(res, 'Incorrect current password', 400);
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    UserModel.update(userWithPass.id, { password: hashedPassword });
-    AuditModel.logAudit(userWithPass.name, 'CHANGE_PASSWORD', 'Password changed successfully', req.ip);
-
-    return sendSuccess(res, null, 'Password changed successfully');
-  } catch (err) {
-    return handleError(res, err);
+  if (user.active === false) {
+    await logLogin({ user, req, status: 'failed' });
+    throw new HttpError(403, 'Your account has been deactivated');
   }
-};
+
+  user.failedLoginAttempts = 0;
+  user.lockoutUntil = null;
+  user.lastLogin = new Date();
+  user.lastLoginIp = clientIp(req);
+  await user.save();
+
+  await logLogin({ user, req, status: 'success' });
+
+  const token = generateToken(user);
+  return res.json({ token, user: serializeAdminUser(user.toObject()) });
+}
+
+/**
+ * Bootstrap route: creates the very first Super Admin. Once any admin user
+ * exists this is disabled (staff are created via the admin users panel).
+ */
+export async function signup(req, res) {
+  const count = await AdminUser.countDocuments();
+  if (count > 0) {
+    throw new HttpError(403, 'Signup is disabled. Admin users are created from the Users panel.');
+  }
+
+  const { name, email, password } = req.body || {};
+  if (!name || !email || !password) {
+    throw new HttpError(400, 'Name, email and password are required');
+  }
+
+  const existing = await AdminUser.findOne({ email: String(email).toLowerCase().trim() });
+  if (existing) {
+    throw new HttpError(400, 'An account with this email already exists');
+  }
+
+  const user = await AdminUser.create({
+    name,
+    email: String(email).toLowerCase().trim(),
+    password: await hashPassword(password),
+    role: 'Super Admin',
+  });
+
+  const token = generateToken(user);
+  return res.status(201).json({ token, user: serializeAdminUser(user.toObject()) });
+}
+
+export async function forgotPassword(req, res) {
+  const { email } = req.body || {};
+  if (!email) {
+    throw new HttpError(400, 'Email is required');
+  }
+
+  const user = await AdminUser.findOne({ email: String(email).toLowerCase().trim() });
+  if (!user) {
+    // Do not reveal whether the account exists.
+    return res.json({ success: true, message: 'If that email exists, a reset link has been sent.' });
+  }
+
+  const token = generateResetToken({ id: user._id.toString(), purpose: 'password_reset' });
+  user.resetPasswordToken = token;
+  user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000);
+  await user.save();
+
+  const resetUrl = `${env.clientUrl}/reset-password/${token}`;
+  const result = await sendPasswordReset(user.email, resetUrl);
+
+  if (!result.success) {
+    throw new HttpError(500, 'Could not send reset email. Try again later.');
+  }
+
+  return res.json({ success: true, message: 'Reset link sent. Check your inbox.' });
+}
+
+export async function resetPassword(req, res) {
+  const { token, password } = req.body || {};
+  if (!token || !password) {
+    throw new HttpError(400, 'Token and new password are required');
+  }
+  if (String(password).length < 6) {
+    throw new HttpError(400, 'Password must be at least 6 characters');
+  }
+
+  const user = await AdminUser.findOne({ resetPasswordToken: token }).select('+password');
+  if (!user || !user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
+    throw new HttpError(400, 'Reset link is invalid or has expired');
+  }
+
+  user.password = await hashPassword(password);
+  user.resetPasswordToken = null;
+  user.resetPasswordExpires = null;
+  user.failedLoginAttempts = 0;
+  user.lockoutUntil = null;
+  await user.save();
+
+  await createNotification({
+    type: 'security',
+    title: 'Password changed',
+    message: `Password for ${user.email} was reset successfully.`,
+    createdBy: user._id,
+  });
+
+  return res.json({ success: true, message: 'Password updated. You can now sign in.' });
+}
+
+export async function changePassword(req, res) {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) {
+    throw new HttpError(400, 'Current and new passwords are required');
+  }
+  if (String(newPassword).length < 6) {
+    throw new HttpError(400, 'New password must be at least 6 characters');
+  }
+
+  const user = await AdminUser.findById(req.user._id).select('+password');
+  const ok = await comparePassword(currentPassword, user.password);
+  if (!ok) {
+    throw new HttpError(400, 'Current password is incorrect');
+  }
+
+  user.password = await hashPassword(newPassword);
+  await user.save();
+
+  return res.json({ success: true, message: 'Password changed successfully.' });
+}
+
+export async function getProfile(req, res) {
+  return res.json(serializeAdminUser(req.user.toObject()));
+}
+
+export default { login, signup, forgotPassword, resetPassword, changePassword, getProfile };

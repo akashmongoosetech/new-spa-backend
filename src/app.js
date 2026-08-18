@@ -1,89 +1,85 @@
 import express from 'express';
-import cors from 'cors';
-import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import morgan from 'morgan';
 import path from 'path';
-import { errorHandler } from './middleware/errorMiddleware.js';
-import { notFound } from './middleware/notFound.js';
-import { securityHeaders } from './middleware/securityHeaders.js';
-import { rateLimit } from './middleware/rateLimit.js';
+import { fileURLToPath } from 'url';
 
+import env from './config/env.js';
+import corsMiddleware from './config/cors.js';
+import { notFoundHandler, errorHandler } from './utils/api.js';
+
+import healthRoutes from './routes/healthRoutes.js';
 import authRoutes from './routes/authRoutes.js';
-import adminRoutes from './routes/adminRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
 import therapistRoutes from './routes/therapistRoutes.js';
+import availabilityRoutes from './routes/availabilityRoutes.js';
+import couponRoutes from './routes/couponRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
-import couponRoutes from './routes/couponRoutes.js';
-import blogRoutes from './routes/blogRoutes.js';
-import testimonialRoutes from './routes/testimonialRoutes.js';
-import galleryRoutes from './routes/galleryRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
+import emailLogRoutes from './routes/emailLogRoutes.js';
+import testimonialRoutes from './routes/testimonialRoutes.js';
+import blogRoutes from './routes/blogRoutes.js';
+import faqRoutes from './routes/faqRoutes.js';
+import galleryRoutes from './routes/galleryRoutes.js';
+import settingRoutes from './routes/settingRoutes.js';
+import scheduleRoutes from './routes/scheduleRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
-import settingsRoutes from './routes/settingsRoutes.js';
-import userRoutes from './routes/userRoutes.js';
+import statsRoutes from './routes/statsRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
-import { getAvailabilitySlots } from './controllers/therapistController.js';
-import { getEmailLogs } from './controllers/auditController.js';
 
-export function createApp() {
-  const app = express();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-  const corsOrigins = process.env.CLIENT_URL
-    ? process.env.CLIENT_URL.split(',').map((o) => o.trim())
-    : ['http://localhost:5173', 'http://localhost:3000'];
+const app = express();
 
-  app.use(cors({
-    origin: corsOrigins,
-    credentials: true
-  }));
-  app.use(securityHeaders);
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-  app.use(cookieParser());
+app.set('trust proxy', 1);
 
-  // Per-route rate limits (login/auth stricter than general)
-  const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: 'Too many authentication attempts. Please try again later.' });
-  const generalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200 });
-  const writeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60 });
-  const aiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: 'AI assistant is busy. Please try again shortly.' });
+app.use(helmet());
+app.use(corsMiddleware);
 
-  // Serve static uploads
-  const uploadsDir = path.join(process.cwd(), 'uploads');
-  app.use('/uploads', express.static(uploadsDir));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
-  // Health check
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
-
-  // Direct routes expected by frontend
-  app.get('/api/availability', getAvailabilitySlots);
-  app.get('/api/email-logs', getEmailLogs);
-
-  // API Route Groups
-  app.use('/api/admin', generalLimiter, adminRoutes);
-  app.use('/api/auth', authLimiter, authRoutes);
-  app.use('/api/services', generalLimiter, serviceRoutes);
-  app.use('/api/therapists', generalLimiter, therapistRoutes);
-  app.use('/api/bookings', writeLimiter, bookingRoutes);
-  app.use('/api/contact', writeLimiter, contactRoutes);
-  app.use('/api/coupons', writeLimiter, couponRoutes);
-  app.use('/api/blogs', generalLimiter, blogRoutes);
-  app.use('/api/testimonials', generalLimiter, testimonialRoutes);
-  app.use('/api/gallery', generalLimiter, galleryRoutes);
-  app.use('/api/newsletter', writeLimiter, newsletterRoutes);
-  app.use('/api/notifications', generalLimiter, notificationRoutes);
-  app.use('/api/settings', generalLimiter, settingsRoutes);
-  app.use('/api/users', generalLimiter, userRoutes);
-  app.use('/api/audit', generalLimiter, auditRoutes);
-  app.use('/api/upload', writeLimiter, uploadRoutes);
-  app.use('/api/ai', aiLimiter, aiRoutes);
-
-  // 404 (JSON) + error middleware
-  app.use(notFound);
-  app.use(errorHandler);
-
-  return app;
+if (env.isDevelopment) {
+  app.use(morgan('dev'));
 }
+
+// Static uploaded images (public URLs built with UPLOAD_PUBLIC_URL).
+app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
+
+// API routes
+const api = express.Router();
+api.use('/health', healthRoutes);
+api.use('/admin', authRoutes);
+api.use('/admin/users', userRoutes);
+api.use('/admin/schedule', scheduleRoutes);
+api.use('/admin/notifications', notificationRoutes);
+api.use('/admin/stats', statsRoutes);
+api.use('/admin', auditRoutes);
+api.use('/admin/reports', reportRoutes);
+api.use('/services', serviceRoutes);
+api.use('/therapists', therapistRoutes);
+api.use('/availability', availabilityRoutes);
+api.use('/coupons', couponRoutes);
+api.use('/bookings', bookingRoutes);
+api.use('/contact', contactRoutes);
+api.use('/newsletter', newsletterRoutes);
+api.use('/email-logs', emailLogRoutes);
+api.use('/testimonials', testimonialRoutes);
+api.use('/blogs', blogRoutes);
+api.use('/faqs', faqRoutes);
+api.use('/gallery', galleryRoutes);
+api.use('/settings', settingRoutes);
+api.use('/upload', uploadRoutes);
+api.use('/ai', aiRoutes);
+app.use('/api', api);
+
+// Frontend-friendly 404 + JSON error contract.
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+export default app;

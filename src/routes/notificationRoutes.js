@@ -1,14 +1,17 @@
 import { Router } from 'express';
-import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from '../controllers/notificationController.js';
-import { authenticateJwt } from '../middleware/authMiddleware.js';
-import { authorizeRoles } from '../middleware/roleMiddleware.js';
+import notificationController from '../controllers/notificationController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validateObjectId from '../middleware/validateObjectId.js';
 
 const router = Router();
-const staffOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin', 'Manager', 'Receptionist')];
 
-router.get('/', staffOnly, getNotifications);
-router.post('/mark-all-read', staffOnly, markAllNotificationsRead);
-router.put('/:id/read', staffOnly, markNotificationRead);
-router.delete('/:id', staffOnly, deleteNotification);
+router.use(protect);
+router.use(authorize('Super Admin', 'Admin', 'Manager', 'Receptionist'));
+
+router.get('/', asyncHandler(notificationController.getNotifications));
+router.put('/:id/read', validateObjectId('id'), asyncHandler(notificationController.markNotificationRead));
+router.post('/mark-all-read', asyncHandler(notificationController.markAllNotificationsRead));
+router.delete('/:id', validateObjectId('id'), asyncHandler(notificationController.deleteNotificationItem));
 
 export default router;

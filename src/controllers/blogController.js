@@ -1,97 +1,71 @@
-import { v4 as uuidv4 } from 'uuid';
-import { BlogModel } from '../models/BlogModel.js';
-import { generateSlug } from '../utils/helpers.js';
-import { sendError, sendSuccess, handleError } from '../utils/responseHandler.js';
-import { createNotification } from '../services/notificationService.js';
+import BlogPost from '../models/Blog.js';
+import { uniqueSlug } from '../utils/slugify.js';
+import { serializeBlogPost } from '../utils/serializers.js';
+import { HttpError } from '../utils/api.js';
+import { logAudit } from '../services/auditService.js';
 
-export const getBlogs = (req, res) => {
-  try {
-    const blogs = BlogModel.getAll();
-    return res.json(blogs);
-  } catch (err) {
-    return handleError(res, err);
+function normalizeBody(b) {
+  const out = {};
+  if (b.title !== undefined) out.title = b.title;
+  if (b.category !== undefined) out.category = b.category;
+  if (b.author !== undefined) out.author = b.author;
+  if (b.date !== undefined) out.date = b.date ? new Date(b.date) : undefined;
+  if (b.read_time !== undefined) out.readTime = Number(b.read_time) || null;
+  if (b.readTime !== undefined) out.readTime = Number(b.readTime) || null;
+  if (b.excerpt !== undefined) out.excerpt = b.excerpt;
+  if (b.summary !== undefined) out.summary = b.summary;
+  if (b.content !== undefined) out.content = b.content;
+  if (b.image_url !== undefined) out.imageUrl = b.image_url;
+  if (b.imageUrl !== undefined) out.imageUrl = b.imageUrl;
+  if (b.cover_image !== undefined) out.coverImage = b.cover_image;
+  if (b.coverImage !== undefined) out.coverImage = b.coverImage;
+  if (b.tags !== undefined) out.tags = b.tags;
+  if (b.published !== undefined) out.published = !(b.published === false || b.published === 0 || b.published === '0');
+  return out;
+}
+
+export async function listBlogs(req, res) {
+  const query = req.query.all === '1' ? {} : { published: true };
+  const posts = await BlogPost.find(query).sort({ createdAt: -1 }).lean();
+  return res.json(posts.map(serializeBlogPost));
+}
+
+export async function createBlog(req, res) {
+  const data = normalizeBody(req.body);
+  if (!data.title || !data.content) throw new HttpError(400, 'Title and content are required');
+
+  const slug = req.body.slug ? req.body.slug : await uniqueSlug(BlogPost, data.title);
+  const post = await BlogPost.create({ ...data, slug });
+
+  await logAudit({ action: 'create', module: 'blogs', details: `Created blog post "${post.title}"`, req });
+  return res.status(201).json(serializeBlogPost(post.toObject()));
+}
+
+export async function updateBlog(req, res) {
+  const post = await BlogPost.findById(req.params.id);
+  if (!post) throw new HttpError(404, 'Blog post not found');
+
+  const data = normalizeBody(req.body);
+  if (req.body.slug) {
+    post.slug = req.body.slug;
+  } else if (data.title && data.title !== post.title) {
+    post.slug = await uniqueSlug(BlogPost, data.title, post._id);
   }
-};
 
-export const getBlogBySlug = (req, res) => {
-  try {
-    const blog = BlogModel.getBySlug(req.params.slug);
-    if (!blog) return sendError(res, 'Blog post not found', 404);
-    return res.json(blog);
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
+  Object.assign(post, data);
+  await post.save();
 
-export const createBlog = (req, res) => {
-  try {
-    const { title, excerpt, content, category, author, imageUrl, tags } = req.body;
-    if (!title || !content) return sendError(res, 'Title and content are required', 400);
+  await logAudit({ action: 'update', module: 'blogs', details: `Updated blog post "${post.title}"`, req });
+  return res.json(serializeBlogPost(post.toObject()));
+}
 
-    const id = `blog-${uuidv4().slice(0, 8)}`;
-    const slug = generateSlug(title);
+export async function deleteBlog(req, res) {
+  const post = await BlogPost.findById(req.params.id);
+  if (!post) throw new HttpError(404, 'Blog post not found');
 
-    const post = BlogModel.create({
-      id, title, slug, excerpt, content, category, author, imageUrl, tags
-    });
+  await post.deleteOne();
+  await logAudit({ action: 'delete', module: 'blogs', details: `Deleted blog post "${post.title}"`, req });
+  return res.json({ success: true });
+}
 
-    createNotification('New Journal Article', `Published: ${title}`, 'info', `/blog/${slug}`);
-    return res.status(201).json(post);
-  } catch (err) {
-    if (String(err?.message || '').includes('UNIQUE')) {
-      return sendError(res, 'A blog post with this title already exists', 400);
-    }
-    return handleError(res, err);
-  }
-};
-
-export const updateBlog = (req, res) => {
-  try {
-    const { id } = req.params;
-    if (req.body.title) {
-      req.body.slug = generateSlug(req.body.title);
-    }
-    const updated = BlogModel.update(id, req.body);
-    return res.json(updated);
-  } catch (err) {
-    if (String(err?.message || '').includes('UNIQUE')) {
-      return sendError(res, 'A blog post with this title already exists', 400);
-    }
-    return handleError(res, err);
-  }
-};
-
-export const addBlogComment = (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, author, email, comment, content } = req.body;
-    const authorName = name || author;
-    const commentContent = comment || content;
-
-    if (!authorName || !commentContent) {
-      return sendError(res, 'Author name and comment content are required', 400);
-    }
-
-    const commentId = `cmt-${uuidv4().slice(0, 8)}`;
-    BlogModel.addComment(id, {
-      id: commentId,
-      author: authorName,
-      email: email || 'guest@auraluxespa.in',
-      content: commentContent
-    });
-
-    createNotification('New Article Comment', `${authorName} commented on article`, 'info');
-    return sendSuccess(res, null, 'Comment added successfully');
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
-
-export const deleteBlog = (req, res) => {
-  try {
-    BlogModel.delete(req.params.id);
-    return sendSuccess(res, null, 'Blog deleted successfully');
-  } catch (err) {
-    return handleError(res, err);
-  }
-};
+export default { listBlogs, createBlog, updateBlog, deleteBlog };

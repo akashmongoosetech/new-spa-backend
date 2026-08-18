@@ -1,9 +1,11 @@
-node_modules
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
 uploads/*
 !uploads/.gitkeep
-database/*.sqlite
-.env
 *.log
-run_err.txt
-run_out.txt
-smoke-test-results.txt
+.DS_Store

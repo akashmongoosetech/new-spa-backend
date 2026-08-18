@@ -1,14 +1,17 @@
 import { Router } from 'express';
-import { getUsers, createUser, updateUser, deleteUser } from '../controllers/userController.js';
-import { authenticateJwt } from '../middleware/authMiddleware.js';
-import { authorizeRoles } from '../middleware/roleMiddleware.js';
+import userController from '../controllers/userController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validateObjectId from '../middleware/validateObjectId.js';
 
 const router = Router();
-const adminOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin')];
 
-router.get('/', adminOnly, getUsers);
-router.post('/', adminOnly, createUser);
-router.put('/:id', adminOnly, updateUser);
-router.delete('/:id', adminOnly, deleteUser);
+router.use(protect);
+router.use(authorize('Super Admin', 'Admin'));
+
+router.get('/', asyncHandler(userController.listUsers));
+router.post('/', asyncHandler(userController.createUser));
+router.put('/:id', validateObjectId('id'), asyncHandler(userController.updateUser));
+router.delete('/:id', validateObjectId('id'), asyncHandler(userController.deleteUser));
 
 export default router;

@@ -1,14 +1,15 @@
 import { Router } from 'express';
-import { getCoupons, validateCoupon, createCoupon, deleteCoupon } from '../controllers/couponController.js';
-import { authenticateJwt } from '../middleware/authMiddleware.js';
-import { authorizeRoles } from '../middleware/roleMiddleware.js';
+import couponController from '../controllers/couponController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validateObjectId from '../middleware/validateObjectId.js';
+import { couponLimiter } from '../config/rateLimiters.js';
 
 const router = Router();
-const adminOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin')];
 
-router.get('/', adminOnly, getCoupons);
-router.post('/validate', validateCoupon);
-router.post('/', adminOnly, createCoupon);
-router.delete('/:id', adminOnly, deleteCoupon);
+router.post('/validate', couponLimiter, asyncHandler(couponController.validateCoupon));
+router.get('/', protect, authorize('Super Admin', 'Admin', 'Manager'), asyncHandler(couponController.listCoupons));
+router.post('/', protect, authorize('Super Admin', 'Admin', 'Manager'), asyncHandler(couponController.createCoupon));
+router.delete('/:id', protect, authorize('Super Admin', 'Admin', 'Manager'), validateObjectId('id'), asyncHandler(couponController.deleteCoupon));
 
 export default router;

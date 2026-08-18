@@ -1,12 +1,14 @@
 import { Router } from 'express';
-import { getAuditLogs, getLoginActivities, getEmailLogs } from '../controllers/auditController.js';
-import { authenticateJwt } from '../middleware/authMiddleware.js';
-import { authorizeRoles } from '../middleware/roleMiddleware.js';
+import auditController from '../controllers/auditController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
+import { protect, authorize } from '../middleware/auth.js';
 
 const router = Router();
-const adminOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin')];
 
-router.get('/logs', adminOnly, getAuditLogs);
-router.get('/activities', adminOnly, getLoginActivities);
-router.get('/emails', adminOnly, getEmailLogs);
+router.use(protect);
+router.use(authorize('Super Admin', 'Admin'));
+
+router.get('/audit-logs', asyncHandler(auditController.listAuditLogs));
+router.get('/login-activities', asyncHandler(auditController.listLoginActivities));
+
 export default router;

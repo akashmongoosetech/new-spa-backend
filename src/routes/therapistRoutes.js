@@ -1,15 +1,14 @@
 import { Router } from 'express';
-import { getTherapists, getTherapistById, createTherapist, updateTherapist, deleteTherapist } from '../controllers/therapistController.js';
-import { authenticateJwt } from '../middleware/authMiddleware.js';
-import { authorizeRoles } from '../middleware/roleMiddleware.js';
+import therapistController from '../controllers/therapistController.js';
+import asyncHandler from '../middleware/asyncHandler.js';
+import { protect, authorize } from '../middleware/auth.js';
+import validateObjectId from '../middleware/validateObjectId.js';
 
 const router = Router();
-const adminOnly = [authenticateJwt, authorizeRoles('Super Admin', 'Admin')];
 
-router.get('/', getTherapists);
-router.get('/:id', getTherapistById);
-router.post('/', adminOnly, createTherapist);
-router.put('/:id', adminOnly, updateTherapist);
-router.delete('/:id', adminOnly, deleteTherapist);
+router.get('/', asyncHandler(therapistController.listTherapists));
+router.post('/', protect, authorize('Super Admin', 'Admin', 'Manager'), asyncHandler(therapistController.createTherapist));
+router.put('/:id', protect, authorize('Super Admin', 'Admin', 'Manager'), validateObjectId('id'), asyncHandler(therapistController.updateTherapist));
+router.delete('/:id', protect, authorize('Super Admin', 'Admin', 'Manager'), validateObjectId('id'), asyncHandler(therapistController.deleteTherapist));
 
 export default router;

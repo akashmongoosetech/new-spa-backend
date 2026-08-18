@@ -1,15 +1,30 @@
-import 'dotenv/config';
-import { createApp } from './app.js';
-import { initDatabase } from './config/db.js';
+import app from './app.js';
+import env from './config/env.js';
+import { connectDB, disconnectDB } from './config/db.js';
 
 async function start() {
-  await initDatabase();
-  const app = createApp();
-  const PORT = process.env.PORT || 3000;
+  await connectDB();
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Backend server running on http://localhost:${PORT}`);
+  const server = app.listen(env.port, () => {
+    console.log(`[server] Aura Luxe API listening on http://localhost:${env.port}`);
+    console.log(`[server] Environment: ${env.nodeEnv}`);
   });
+
+  const shutdown = async (signal) => {
+    console.log(`\n[server] ${signal} received — shutting down gracefully...`);
+    server.close(async () => {
+      await disconnectDB();
+      process.exit(0);
+    });
+    // Force-exit if connections hang.
+    setTimeout(() => process.exit(1), 10000).unref();
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
-start();
+start().catch((err) => {
+  console.error('[server] Failed to start:', err.message);
+  process.exit(1);
+});

@@ -1,11 +1,33 @@
-import { v4 as uuidv4 } from 'uuid';
-import { run } from '../config/db.js';
+import Notification from '../models/Notification.js';
 
-export function createNotification(title, message, type = 'info', link) {
-  const id = `notif-${uuidv4().slice(0, 8)}`;
-  run(
-    'INSERT INTO notifications (id, title, message, type, is_read, link) VALUES (?, ?, ?, ?, 0, ?)',
-    [id, title, message, type, link || null]
-  );
-  return id;
+export async function createNotification({ type = 'info', title, message = '', link = '', createdBy = null }) {
+  try {
+    return await Notification.create({ type, title, message, link, createdBy });
+  } catch (err) {
+    console.error('[notifications] create failed:', err.message);
+    return null;
+  }
 }
+
+export async function listNotifications({ limit = 50 } = {}) {
+  const docs = await Notification.find().sort({ createdAt: -1 }).limit(limit);
+  const unreadCount = await Notification.countDocuments({ isRead: false });
+  return { docs, unreadCount };
+}
+
+export async function markRead(id) {
+  await Notification.updateOne({ _id: id }, { $set: { isRead: true } });
+  return true;
+}
+
+export async function markAllRead() {
+  const res = await Notification.updateMany({ isRead: false }, { $set: { isRead: true } });
+  return { modifiedCount: res.modifiedCount };
+}
+
+export async function deleteNotification(id) {
+  await Notification.findByIdAndDelete(id);
+  return true;
+}
+
+export default { createNotification, listNotifications, markRead, markAllRead, deleteNotification };
