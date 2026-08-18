@@ -81,9 +81,9 @@ export async function exportBookingsCsv(type = 'all') {
     );
   }
 
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
   return {
-    filename: `bookings_${type}_${dateStr}.csv`,
+    filename: `bookings_${type}_${today}.csv`,
     csv: lines.join('\r\n'),
   };
 }

@@ -4,6 +4,37 @@
  * Usage: npm run smoke
  */
 import env from '../src/config/env.js';
+import http from 'http';
+
+function rawMultipart(method, path, { token, fieldName, filename, contentType, data }) {
+  const boundary = `----AuraLuxeSmoke${Date.now()}`;
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`),
+    Buffer.from(data),
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  return new Promise((resolve, reject) => {
+    const req = http.request(`${BASE}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length,
+      },
+    }, (res) => {
+      let text = '';
+      res.on('data', (c) => (text += c));
+      res.on('end', () => {
+        let data = null;
+        try { data = JSON.parse(text); } catch { data = text; }
+        resolve({ status: res.statusCode, data });
+      });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
 
 const BASE = `http://localhost:${env.port}/api`;
 const results = [];
@@ -223,7 +254,7 @@ async function main() {
 
   // 11) Reports export
   const exportRes = await req('GET', '/admin/reports/export?type=all', { token: authToken });
-  check('GET /admin/reports/export?type=all → CSV', exportRes.status === 200 && typeof exportRes.data === 'string' && exportRes.data.includes('BookingNumber'));
+  check('GET /admin/reports/export?type=all → CSV', exportRes.status === 200 && typeof exportRes.data === 'string' && exportRes.data.includes('BookingNumber'), `status=${exportRes.status} typeof=${typeof exportRes.data} preview=${typeof exportRes.data === 'string' ? exportRes.data.slice(0, 40) : JSON.stringify(exportRes.data)}`);
 
   const exportContacts = await req('GET', '/admin/reports/export?type=contacts', { token: authToken });
   check('GET /admin/reports/export?type=contacts → CSV', exportContacts.status === 200 && typeof exportContacts.data === 'string' && exportContacts.data.includes('Name'));
@@ -278,9 +309,13 @@ async function main() {
       0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
       0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
     ]);
-    const form = new FormData();
-    form.append('file', new Blob([png], { type: 'image/png' }), 'smoke.png');
-    const up = await req('POST', '/upload', { token: authToken, raw: form });
+    const up = await rawMultipart('POST', '/upload', {
+      token: authToken,
+      fieldName: 'file',
+      filename: 'smoke.png',
+      contentType: 'image/png',
+      data: png,
+    });
     check('POST /upload → {url, filename, mimetype, size}',
       up.status === 201 && up.data.url && up.data.filename && up.data.mimetype === 'image/png', `status=${up.status}`);
   } catch (e) {
