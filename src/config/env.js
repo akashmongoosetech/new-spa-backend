@@ -1,11 +1,28 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import dns from 'dns';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load backend/.env
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+// Node's c-ares resolver can be misconfigured on some machines (e.g. pointed
+// at a loopback DNS that nothing listens on), which breaks SRV lookups for
+// mongodb+srv:// URIs. When DNS_SERVERS is set, point Node's resolver at it.
+const dnsServers = (process.env.DNS_SERVERS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+if (dnsServers.length > 0) {
+  try {
+    dns.setServers(dnsServers);
+  } catch {
+    // Ignore invalid overrides; fall back to the OS default resolver.
+  }
+}
 
 function required(name, fallback) {
   const value = process.env[name];
@@ -26,6 +43,8 @@ export const env = {
   port: parseInt(process.env.PORT || '3000', 10),
 
   mongodbUri: required('MONGODB_URI'),
+
+  dnsServers,
 
   jwtSecret: required('JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
