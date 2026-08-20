@@ -59,7 +59,7 @@ export const env = {
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
     from: process.env.MAIL_FROM || process.env.SMTP_USER || '',
-    fromName: process.env.MAIL_FROM_NAME || 'Aura Luxe Spa',
+    fromName: process.env.MAIL_FROM_NAME || 'Tripod Wellness',
   },
 
   adminEmail: process.env.ADMIN_EMAIL || '',

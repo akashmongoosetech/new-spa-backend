@@ -5,7 +5,7 @@
  */
 
 function shell({ settings, title, body }) {
-  const name = settings.businessName || 'Aura Luxe Spa & Wellness';
+  const name = settings.businessName || 'Tripod Wellness';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -53,7 +53,7 @@ export function bookingConfirmation(settings, booking) {
   const statusLabel = booking.status === 'pending' ? 'PENDING CONFIRMATION' : 'CONFIRMED';
   const body = `
     <h2 style="margin:0 0 12px;color:#111827;">Appointment ${statusLabel}</h2>
-    <p>Dear <strong>${booking.customerName}</strong>, thank you for choosing ${settings.businessName || 'Aura Luxe Spa & Wellness'}.</p>
+    <p>Dear <strong>${booking.customerName}</strong>, thank you for choosing ${settings.businessName || 'Tripod Wellness'}.</p>
     <table role="presentation" width="100%" cellpadding="8" cellspacing="0" style="background:#f9fafb;border-radius:8px;margin:16px 0;">
       <tr><td style="color:#6b7280;width:45%;">Booking ref.</td><td style="font-weight:600;">${booking.bookingNumber}</td></tr>
       <tr><td style="color:#6b7280;">Service</td><td>${booking.serviceTitle || '—'}</td></tr>
@@ -115,7 +115,7 @@ export function newsletterWelcome(settings, subscriber) {
   const body = `
     <h2 style="margin:0 0 12px;color:#111827;">Welcome aboard!</h2>
     <p>Dear <strong>${subscriber.email}</strong>,</p>
-    <p>Thanks for subscribing to ${settings.businessName || 'Aura Luxe Spa & Wellness'} updates. Expect offers, new-treatment announcements and wellness tips.</p>
+    <p>Thanks for subscribing to ${settings.businessName || 'Tripod Wellness'} updates. Expect offers, new-treatment announcements and wellness tips.</p>
   `;
   return shell({ settings, title: 'Welcome to our newsletter', body });
 }
@@ -123,7 +123,7 @@ export function newsletterWelcome(settings, subscriber) {
 export function passwordReset(settings, resetUrl) {
   const body = `
     <h2 style="margin:0 0 12px;color:#111827;">Reset your password</h2>
-    <p>You requested a password reset for your ${settings.businessName || 'Aura Luxe'} staff account.</p>
+    <p>You requested a password reset for your ${settings.businessName || 'Tripod Wellness'} staff account.</p>
     <p style="margin:24px 0;">
       <a href="${resetUrl}" style="background:#2CB5A0;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;">Reset password</a>
     </p>
@@ -136,7 +136,7 @@ export function staffApplicationApproved(settings, { name, role, loginUrl }) {
   const body = `
     <h2 style="margin:0 0 12px;color:#111827;">Your staff account was approved</h2>
     <p>Dear <strong>${name}</strong>,</p>
-    <p>Your application for <strong>${role}</strong> access to the ${settings.businessName || 'Aura Luxe Spa & Wellness'} admin portal has been approved by the director.</p>
+    <p>Your application for <strong>${role}</strong> access to the ${settings.businessName || 'Tripod Wellness'} admin portal has been approved by the director.</p>
     <p>You can now sign in with the email and password you submitted during registration:</p>
     <p style="margin:24px 0;">
       <a href="${loginUrl}" style="background:#2CB5A0;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;">Sign in to the portal</a>
@@ -151,7 +151,7 @@ export function staffApplicationRejected(settings, { name, reason }) {
   const body = `
     <h2 style="margin:0 0 12px;color:#111827;">Update on your staff account application</h2>
     <p>Dear <strong>${name}</strong>,</p>
-    <p>Thank you for your interest in joining the ${settings.businessName || 'Aura Luxe Spa & Wellness'} team.</p>
+    <p>Thank you for your interest in joining the ${settings.businessName || 'Tripod Wellness'} team.</p>
     <p>After review, your application for staff portal access could not be approved at this time.</p>
     ${reason ? `<p style="color:#6b7280;font-style:italic;border-left:3px solid #2CB5A0;padding-left:12px;">${reason}</p>` : ''}
     <p>If you believe this decision was made in error, please reply to this email or contact the director at ${settings.phone || ''}.</p>

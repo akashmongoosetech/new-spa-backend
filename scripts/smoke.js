@@ -7,7 +7,7 @@ import env from '../src/config/env.js';
 import http from 'http';
 
 function rawMultipart(method, path, { token, fieldName, filename, contentType, data }) {
-  const boundary = `----AuraLuxeSmoke${Date.now()}`;
+  const boundary = `----TripodWellnessSmoke${Date.now()}`;
   const body = Buffer.concat([
     Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`),
     Buffer.from(data),
@@ -77,7 +77,7 @@ async function main() {
   let managerToken = null;
   const created = { service: null, coupon: null, manager: null };
 
-  console.log('\n== Aura Luxe API smoke test ==\n');
+  console.log('\n== Tripod Wellness API smoke test ==\n');
 
   // 0) Health
   try {
@@ -90,7 +90,7 @@ async function main() {
   }
 
   // 1) Auth: login
-  const seedEmail = process.env.ADMIN_SEED_EMAIL || env.adminEmail || 'admin@auraluxespa.com';
+  const seedEmail = process.env.ADMIN_SEED_EMAIL || env.adminEmail || 'admin@tripodwellness.com';
   const seedPassword = process.env.ADMIN_SEED_PASSWORD || '';
   const login = await req('POST', '/admin/login', { body: { email: seedEmail, password: seedPassword } });
   check('POST /admin/login', login.status === 200 && login.data.token && login.data.user, `status=${login.status}`);
@@ -111,7 +111,7 @@ async function main() {
 
   const newUser = await req('POST', '/admin/users', {
     token: authToken,
-    body: { name: 'Smoke Manager', email: `smoke${Date.now()}@auraluxespa.test`, password: 'test1234', role: 'Manager' },
+    body: { name: 'Smoke Manager', email: `smoke${Date.now()}@tripodwellness.test`, password: 'test1234', role: 'Manager' },
   });
   check('POST /admin/users (create Manager)', newUser.status === 201 && newUser.data.id, `status=${newUser.status}`);
   created.manager = newUser.data;
@@ -129,7 +129,7 @@ async function main() {
   check('Manager cannot create users → 403', managerCreateUser.status === 403, `status=${managerCreateUser.status}`);
 
   // 3b) Staff applications (request → review → approve → login)
-  const appEmail = `smokeapp${Date.now()}@auraluxespa.test`;
+  const appEmail = `smokeapp${Date.now()}@tripodwellness.test`;
   const signup = await req('POST', '/admin/signup', {
     body: { name: 'Smoke Applicant', email: appEmail, password: 'test1234', requestedRole: 'Manager' },
   });
@@ -261,8 +261,13 @@ async function main() {
   const settings = await req('GET', '/settings');
   check('GET /settings → camelCase object', settings.status === 200 && settings.data.businessName && settings.data.currencySymbol, `status=${settings.status}`);
 
+  const originalTagline = settings.data?.tagline;
   const settingsUpd = await req('PUT', '/settings', { token: authToken, body: { tagline: 'Smoke updated tagline' } });
   check('PUT /settings (camelCase)', settingsUpd.status === 200 && settingsUpd.data.tagline === 'Smoke updated tagline');
+  if (settingsUpd.status === 200) {
+    const restore = await req('PUT', '/settings', { token: authToken, body: { tagline: originalTagline } });
+    check('PUT /settings (tagline restored)', restore.status === 200 && restore.data.tagline === originalTagline);
+  }
 
   const schedule = await req('GET', '/admin/schedule', { token: authToken });
   check('GET /admin/schedule', schedule.status === 200 && Array.isArray(schedule.data.timeSlots), `status=${schedule.status}`);

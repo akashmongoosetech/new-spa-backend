@@ -6,7 +6,7 @@ async function start() {
   await connectDB();
 
   const server = app.listen(env.port, () => {
-    console.log(`[server] Aura Luxe API listening on http://localhost:${env.port}`);
+    console.log(`[server] Tripod Wellness API listening on http://localhost:${env.port}`);
     console.log(`[server] Environment: ${env.nodeEnv}`);
   });
 

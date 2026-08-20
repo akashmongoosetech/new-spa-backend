@@ -68,7 +68,7 @@ export async function replyContact(req, res) {
   const { sendEmail } = await import('../services/emailService.js');
   await sendEmail({
     to: contact.email,
-    subject: `Re: ${contact.subject || 'Your message to ' + (settings.businessName || 'Aura Luxe')}`,
+    subject: `Re: ${contact.subject || 'Your message to ' + (settings.businessName || 'Tripod Wellness')}`,
     html: `<p>Dear <strong>${contact.name}</strong>,</p><p>${String(replyText).replace(/\n/g, '<br/>')}</p>`,
     type: 'contact_thankyou',
   });

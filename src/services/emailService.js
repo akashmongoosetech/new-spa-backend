@@ -48,8 +48,8 @@ export async function sendEmail({ to, subject, html, type = 'booking_confirmatio
     return { success: false };
   }
 
-  const fromName = env.smtp.fromName || 'Aura Luxe Spa';
-  const fromAddress = env.smtp.from || env.adminEmail || 'noreply@auraluxespa.local';
+  const fromName = env.smtp.fromName || 'Tripod Wellness';
+  const fromAddress = env.smtp.from || env.adminEmail || 'noreply@tripodwellness.local';
   const mailOptions = {
     from: `"${fromName}" <${fromAddress}>`,
     to,

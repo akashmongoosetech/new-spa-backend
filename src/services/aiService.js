@@ -4,7 +4,7 @@ import Setting from '../models/Setting.js';
 
 function businessContext(settings) {
   return {
-    name: settings.businessName || 'Aura Luxe Spa & Wellness',
+    name: settings.businessName || 'Tripod Wellness',
     address: settings.address || '',
     city: settings.city || '',
     phone: settings.phone || '',

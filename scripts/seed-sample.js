@@ -126,8 +126,8 @@ const FAQS = [
   {
     category: 'general',
     order: 1,
-    question: 'Is Aura Luxe strictly a professional Men-to-Men spa in Mumbai?',
-    answer: 'Yes. Aura Luxe is an exclusive, licensed professional Men-to-Men massage therapy center located in Bandra West, Mumbai. All our therapists are certified male practitioners dedicated to providing elite therapeutic wellness in an ethical, comfortable, and highly professional environment.',
+    question: 'Is Tripod Wellness strictly a professional Men-to-Men spa in Indore?',
+    answer: 'Yes. Tripod Wellness is an exclusive, licensed professional Men-to-Men massage therapy center serving Indore, Ujjain & Dewas. All our therapists are certified male practitioners dedicated to providing elite therapeutic wellness in an ethical, comfortable, and highly professional environment.',
   },
   {
     category: 'booking',
@@ -362,9 +362,9 @@ const BLOGS = [
 const TESTIMONIALS = [
   {
     name: 'Rahul Sharma',
-    role: 'Management Consultant, Bandra Mumbai',
+    role: 'Management Consultant, Indore',
     rating: 5,
-    comment: "Aura Luxe is in a league of its own. The ambiance is calming, the hygiene is immaculate, and Rajesh gave me the best Deep Tissue massage I've ever had in my life.",
+    comment: "Tripod Wellness is in a league of its own. The ambiance is calming, the hygiene is immaculate, and Rajesh gave me the best Deep Tissue massage I've ever had in my life.",
     serviceTitle: 'Deep Tissue Muscle Recovery Therapy',
     approved: true,
   },
