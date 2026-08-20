@@ -128,6 +128,38 @@ async function main() {
   });
   check('Manager cannot create users → 403', managerCreateUser.status === 403, `status=${managerCreateUser.status}`);
 
+  // 3b) Staff applications (request → review → approve → login)
+  const appEmail = `smokeapp${Date.now()}@auraluxespa.test`;
+  const signup = await req('POST', '/admin/signup', {
+    body: { name: 'Smoke Applicant', email: appEmail, password: 'test1234', requestedRole: 'Manager' },
+  });
+  check('POST /admin/signup → pending application', signup.status === 201 && signup.data.success === true, `status=${signup.status}`);
+
+  const dupSignup = await req('POST', '/admin/signup', { body: { name: 'Smoke Applicant', email: appEmail, password: 'test1234' } });
+  check('POST /admin/signup duplicate email → 400', dupSignup.status === 400, `status=${dupSignup.status}`);
+
+  const shortPw = await req('POST', '/admin/signup', { body: { name: 'Short', email: 'short@x.test', password: '123' } });
+  check('POST /admin/signup short password → 400', shortPw.status === 400, `status=${shortPw.status}`);
+
+  const superReq = await req('POST', '/admin/signup', { body: { name: 'Sup', email: 'sup@x.test', password: 'test1234', requestedRole: 'Super Admin' } });
+  check('POST /admin/signup Super Admin request → 400', superReq.status === 400, `status=${superReq.status}`);
+
+  const appsNoAuth = await req('GET', '/admin/applications');
+  check('GET /admin/applications without token → 401', appsNoAuth.status === 401, `status=${appsNoAuth.status}`);
+
+  const appsAsManager = await req('GET', '/admin/applications', { token: managerToken });
+  check('GET /admin/applications as Manager → 403', appsAsManager.status === 403, `status=${appsAsManager.status}`);
+
+  const apps = await req('GET', '/admin/applications', { token: authToken });
+  const createdApp = Array.isArray(apps.data) ? apps.data.find((a) => a.email === appEmail) : null;
+  check('GET /admin/applications → contains new application', apps.status === 200 && !!createdApp && createdApp.status === 'pending', `status=${apps.status}`);
+
+  const approve = await req('POST', `/admin/applications/${createdApp?.id}/approve`, { token: authToken });
+  check('POST /admin/applications/:id/approve', approve.status === 200 && approve.data.status === 'approved', `status=${approve.status}`);
+
+  const approvedLogin = await req('POST', '/admin/login', { body: { email: appEmail, password: 'test1234' } });
+  check('Approved applicant can login', approvedLogin.status === 200 && !!approvedLogin.data?.token, `status=${approvedLogin.status}`);
+
   // 4) Services CRUD
   const svc = await req('POST', '/services', {
     token: authToken,
@@ -349,6 +381,12 @@ async function main() {
   if (created.manager?.id) {
     const delUser = await req('DELETE', `/admin/users/${created.manager.id}`, { token: authToken });
     check('DELETE /admin/users/:id', delUser.status === 200 && delUser.data.success === true);
+  }
+  const usersAfterApp = await req('GET', '/admin/users', { token: authToken });
+  const smokeAppUser = Array.isArray(usersAfterApp.data) ? usersAfterApp.data.find((u) => u.email === appEmail) : null;
+  if (smokeAppUser?.id) {
+    const delAppUser = await req('DELETE', `/admin/users/${smokeAppUser.id}`, { token: authToken });
+    check('DELETE approved applicant user', delAppUser.status === 200 && delAppUser.data.success === true);
   }
   const subs2 = await req('GET', '/newsletter', { token: authToken });
   const smokeSub = subs2.data?.find((s) => s.email === 'smoke-sub@example.com');

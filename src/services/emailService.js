@@ -160,4 +160,27 @@ export async function sendPasswordReset(to, resetUrl) {
   });
 }
 
-export default { sendEmail, sendBookingConfirmation, sendBookingStatusUpdate, sendBookingReminder, sendContactThankYou, sendNewsletterWelcome, sendPasswordReset, getSettings };
+export async function sendStaffApplicationApproved(to, name, role) {
+  const settings = await getSettings();
+  const loginUrl = `${env.clientUrl}/admin-login`;
+  const html = templates.staffApplicationApproved(settings, { name, role, loginUrl });
+  return sendEmail({
+    to,
+    subject: 'Your staff account was approved',
+    html,
+    type: 'staff_application',
+  });
+}
+
+export async function sendStaffApplicationRejected(to, name, reason) {
+  const settings = await getSettings();
+  const html = templates.staffApplicationRejected(settings, { name, reason });
+  return sendEmail({
+    to,
+    subject: 'Update on your staff account application',
+    html,
+    type: 'staff_application',
+  });
+}
+
+export default { sendEmail, sendBookingConfirmation, sendBookingStatusUpdate, sendBookingReminder, sendContactThankYou, sendNewsletterWelcome, sendPasswordReset, sendStaffApplicationApproved, sendStaffApplicationRejected, getSettings };

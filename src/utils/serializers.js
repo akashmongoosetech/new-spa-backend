@@ -29,6 +29,23 @@ export function serializeAdminUser(u, extra = {}) {
   };
 }
 
+// ---------- StaffApplication (mapStaffApplication reads camelCase) ----------
+export function serializeStaffApplication(a) {
+  if (!a) return null;
+  return {
+    id: id(a),
+    name: a.name,
+    email: a.email,
+    requestedRole: a.requestedRole,
+    status: a.status,
+    note: a.note || '',
+    reviewNote: a.reviewNote || '',
+    reviewedBy: a.reviewedBy ? a.reviewedBy.toString() : '',
+    createdAt: a.createdAt || a.created_at,
+    reviewedAt: a.reviewedAt || null,
+  };
+}
+
 // ---------- Service (mapService reads snake_case) ----------
 export function serializeService(s) {
   if (!s) return null;
@@ -382,6 +399,7 @@ export function serializeSettings(s) {
 
 export default {
   serializeAdminUser,
+  serializeStaffApplication,
   serializeService,
   serializeTherapist,
   serializeBooking,

@@ -132,4 +132,31 @@ export function passwordReset(settings, resetUrl) {
   return shell({ settings, title: 'Reset your password', body });
 }
 
-export default { bookingConfirmation, bookingStatusUpdate, bookingReminder, contactThankYou, newsletterWelcome, passwordReset };
+export function staffApplicationApproved(settings, { name, role, loginUrl }) {
+  const body = `
+    <h2 style="margin:0 0 12px;color:#111827;">Your staff account was approved</h2>
+    <p>Dear <strong>${name}</strong>,</p>
+    <p>Your application for <strong>${role}</strong> access to the ${settings.businessName || 'Aura Luxe Spa & Wellness'} admin portal has been approved by the director.</p>
+    <p>You can now sign in with the email and password you submitted during registration:</p>
+    <p style="margin:24px 0;">
+      <a href="${loginUrl}" style="background:#2CB5A0;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;">Sign in to the portal</a>
+    </p>
+    <p>Forgot your password? Use the "Forgot?" link on the sign-in page to reset it.</p>
+    <p style="color:#6b7280;font-size:13px;">Questions? Contact the director at ${settings.phone || ''}.</p>
+  `;
+  return shell({ settings, title: 'Your staff account was approved', body });
+}
+
+export function staffApplicationRejected(settings, { name, reason }) {
+  const body = `
+    <h2 style="margin:0 0 12px;color:#111827;">Update on your staff account application</h2>
+    <p>Dear <strong>${name}</strong>,</p>
+    <p>Thank you for your interest in joining the ${settings.businessName || 'Aura Luxe Spa & Wellness'} team.</p>
+    <p>After review, your application for staff portal access could not be approved at this time.</p>
+    ${reason ? `<p style="color:#6b7280;font-style:italic;border-left:3px solid #2CB5A0;padding-left:12px;">${reason}</p>` : ''}
+    <p>If you believe this decision was made in error, please reply to this email or contact the director at ${settings.phone || ''}.</p>
+  `;
+  return shell({ settings, title: 'Update on your staff account application', body });
+}
+
+export default { bookingConfirmation, bookingStatusUpdate, bookingReminder, contactThankYou, newsletterWelcome, passwordReset, staffApplicationApproved, staffApplicationRejected };

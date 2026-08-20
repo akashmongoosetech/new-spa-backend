@@ -3,7 +3,8 @@ import Setting from '../models/Setting.js';
 import LoginActivity from '../models/LoginActivity.js';
 import { generateToken, generateResetToken } from '../utils/generateToken.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
-import { serializeAdminUser } from '../utils/serializers.js';
+import { serializeAdminUser, serializeStaffApplication } from '../utils/serializers.js';
+import { submitApplication } from './applicationController.js';
 import { sendPasswordReset } from '../services/emailService.js';
 import { createNotification } from '../services/notificationService.js';
 import { HttpError } from '../utils/api.js';
@@ -90,34 +91,18 @@ export async function login(req, res) {
 }
 
 /**
- * Bootstrap route: creates the very first Super Admin. Once any admin user
- * exists this is disabled (staff are created via the admin users panel).
+ * Public staff application submission. Creates a PENDING application that a
+ * Super Admin must approve before the account becomes active (see
+ * applicationController.approveApplication). No account or session is created
+ * here.
  */
 export async function signup(req, res) {
-  const count = await AdminUser.countDocuments();
-  if (count > 0) {
-    throw new HttpError(403, 'Signup is disabled. Admin users are created from the Users panel.');
-  }
-
-  const { name, email, password } = req.body || {};
-  if (!name || !email || !password) {
-    throw new HttpError(400, 'Name, email and password are required');
-  }
-
-  const existing = await AdminUser.findOne({ email: String(email).toLowerCase().trim() });
-  if (existing) {
-    throw new HttpError(400, 'An account with this email already exists');
-  }
-
-  const user = await AdminUser.create({
-    name,
-    email: String(email).toLowerCase().trim(),
-    password: await hashPassword(password),
-    role: 'Super Admin',
+  const app = await submitApplication(req.body || {});
+  return res.status(201).json({
+    success: true,
+    message: 'Application submitted. It will be reviewed by the Super Director.',
+    application: serializeStaffApplication(app.toObject()),
   });
-
-  const token = generateToken(user);
-  return res.status(201).json({ token, user: serializeAdminUser(user.toObject()) });
 }
 
 export async function forgotPassword(req, res) {
