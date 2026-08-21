@@ -33,6 +33,61 @@ const adminUserSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    firstName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    lastName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    username: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
+    address: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    city: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    state: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    country: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    pincode: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    dob: {
+      type: Date,
+      default: null,
+    },
+    gender: {
+      type: String,
+      enum: ['', 'Male', 'Female', 'Other'],
+      default: '',
+    },
+    tokenVersion: {
+      type: Number,
+      default: 0,
+    },
     active: {
       type: Boolean,
       default: true,

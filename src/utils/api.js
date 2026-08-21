@@ -57,6 +57,9 @@ export function errorHandler(err, req, res, next) {
   if (err.name === 'MulterError') {
     return sendError(res, 400, err.message);
   }
+  if (err.status && typeof err.status === 'number') {
+    return sendError(res, err.status, err.message, err.extra || {});
+  }
   if (err.type === 'entity.too.large') {
     return sendError(res, 413, 'Request payload too large');
   }

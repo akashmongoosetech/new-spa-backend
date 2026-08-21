@@ -36,6 +36,10 @@ export async function protect(req, res, next) {
   if (user.active === false) {
     return sendError(res, 401, 'Account is deactivated');
   }
+  // Token version invalidation: password changes bump tokenVersion, killing old sessions.
+  if ((decoded.v || 0) !== (user.tokenVersion || 0)) {
+    return sendError(res, 401, 'Session expired — please sign in again');
+  }
 
   req.user = user;
   return next();

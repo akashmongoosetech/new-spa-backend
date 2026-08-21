@@ -7,7 +7,7 @@ import env from '../config/env.js';
  */
 export function generateToken(user, options = {}) {
   return jwt.sign(
-    { id: user._id ? user._id.toString() : user.id, role: user.role },
+    { id: user._id ? user._id.toString() : user.id, role: user.role, v: user.tokenVersion || 0 },
     env.jwtSecret,
     { expiresIn: options.expiresIn || env.jwtExpiresIn }
   );

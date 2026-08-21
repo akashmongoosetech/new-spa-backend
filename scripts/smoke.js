@@ -312,6 +312,152 @@ async function main() {
   const me = await req('GET', '/admin/me', { token: authToken });
   check('GET /admin/me → {id, name, role}', me.status === 200 && me.data.id && me.data.name && me.data.role, `status=${me.status}`);
 
+  // 11b2) Profile & account management
+  const me2 = await req('GET', '/admin/me', { token: authToken });
+  check('GET /admin/me exposes profile fields',
+    me2.status === 200 && 'phone' in me2.data && 'username' in me2.data && 'first_name' in me2.data && 'dob' in me2.data, `status=${me2.status}`);
+
+  const profUpd = await req('PUT', '/admin/profile', {
+    token: authToken,
+    body: {
+      firstName: 'Smoke',
+      lastName: 'Director',
+      username: `smoke_dir_${Date.now()}`,
+      phone: '+91-9876543210',
+      address: '12 Wellness Lane',
+      city: 'Indore',
+      state: 'Madhya Pradesh',
+      country: 'India',
+      pincode: '452001',
+      dob: '1990-05-15',
+      gender: 'Male',
+    },
+  });
+  check('PUT /admin/profile (all fields)',
+    profUpd.status === 200 && profUpd.data.first_name === 'Smoke' && profUpd.data.pincode === '452001' && profUpd.data.gender === 'Male', `status=${profUpd.status}`);
+
+  const massAssault = await req('PUT', '/admin/profile', {
+    token: authToken,
+    body: { role: 'Receptionist', active: false, avatarUrl: 'http://evil.example/x.png', phone: '+91-9999999999' },
+  });
+  check('PUT /admin/profile whitelist (role/active/avatar ignored)',
+    massAssault.status === 200 && massAssault.data.role === 'Super Admin' && massAssault.data.active === 1 && massAssault.data.avatar_url === profUpd.data.avatar_url && massAssault.data.phone === '+91-9999999999');
+
+  const badUsername = await req('PUT', '/admin/profile', { token: authToken, body: { username: 'ab' } });
+  check('PUT /admin/profile invalid username → 400', badUsername.status === 400, `status=${badUsername.status}`);
+
+  const dupUsername = await req('PUT', '/admin/profile', { token: managerToken, body: { username: profUpd.data.username } });
+  check('PUT /admin/profile duplicate username → 400', dupUsername.status === 400, `status=${dupUsername.status}`);
+
+  const futureDob = await req('PUT', '/admin/profile', { token: authToken, body: { dob: '2099-01-01' } });
+  check('PUT /admin/profile future DOB → 400', futureDob.status === 400, `status=${futureDob.status}`);
+
+  const restoreProf = await req('PUT', '/admin/profile', {
+    token: authToken,
+    body: {
+      firstName: me2.data.first_name,
+      lastName: me2.data.last_name,
+      username: me2.data.username || '',
+      phone: me2.data.phone,
+      address: me2.data.address,
+      city: me2.data.city,
+      state: me2.data.state,
+      country: me2.data.country,
+      pincode: me2.data.pincode,
+      dob: me2.data.dob || '',
+      gender: me2.data.gender,
+    },
+  });
+  check('PUT /admin/profile (original values restored)', restoreProf.status === 200 && restoreProf.data.username === (me2.data.username || ''), `status=${restoreProf.status}`);
+
+  // Profile update works for Manager/Receptionist (self-service)
+  const managerPhone = await req('PUT', '/admin/profile', { token: managerToken, body: { phone: '+91-1111111111', city: 'Ujjain' } });
+  check('PUT /admin/profile as Manager → 200', managerPhone.status === 200 && managerPhone.data.phone === '+91-1111111111' && managerPhone.data.city === 'Ujjain', `status=${managerPhone.status}`);
+
+  // Email change requires current password
+  const newManagerEmail = `smokeman${Date.now()}@tripodwellness.test`;
+  const emailNoPw = await req('PUT', '/admin/profile', { token: managerToken, body: { email: newManagerEmail } });
+  check('PUT /admin/profile email without password → 400', emailNoPw.status === 400, `status=${emailNoPw.status}`);
+  const emailBadPw = await req('PUT', '/admin/profile', { token: managerToken, body: { email: newManagerEmail, currentPassword: 'wrongpass' } });
+  check('PUT /admin/profile email wrong password → 400', emailBadPw.status === 400, `status=${emailBadPw.status}`);
+  const emailOk = await req('PUT', '/admin/profile', { token: managerToken, body: { email: newManagerEmail, currentPassword: 'test1234' } });
+  check('PUT /admin/profile email with password → 200', emailOk.status === 200 && emailOk.data.email === newManagerEmail, `status=${emailOk.status}`);
+
+  const meAfterEmail = await req('GET', '/admin/me', { token: managerToken });
+  check('GET /admin/me reflects new email', meAfterEmail.status === 200 && meAfterEmail.data.email === newManagerEmail);
+
+  const reloginNewEmail = await req('POST', '/admin/login', { body: { email: newManagerEmail, password: 'test1234' } });
+  check('Login with new email works', reloginNewEmail.status === 200 && !!reloginNewEmail.data?.token);
+
+  // Change password: validation + session invalidation
+  const noConfirm = await req('POST', '/admin/change-password', { token: managerToken, body: { currentPassword: 'test1234', newPassword: 'Test@9876' } });
+  check('POST /admin/change-password missing confirm → 400', noConfirm.status === 400, `status=${noConfirm.status}`);
+  const shortNew = await req('POST', '/admin/change-password', { token: managerToken, body: { currentPassword: 'test1234', newPassword: 'abc123', confirmNewPassword: 'abc123' } });
+  check('POST /admin/change-password short new → 400', shortNew.status === 400, `status=${shortNew.status}`);
+  const weakNew = await req('POST', '/admin/change-password', { token: managerToken, body: { currentPassword: 'test1234', newPassword: 'abcdefgh', confirmNewPassword: 'abcdefgh' } });
+  check('POST /admin/change-password no digit → 400', weakNew.status === 400, `status=${weakNew.status}`);
+  const mismatchNew = await req('POST', '/admin/change-password', { token: managerToken, body: { currentPassword: 'test1234', newPassword: 'Test@9876', confirmNewPassword: 'Test@0000' } });
+  check('POST /admin/change-password confirm mismatch → 400', mismatchNew.status === 400, `status=${mismatchNew.status}`);
+  const wrongCur = await req('POST', '/admin/change-password', { token: managerToken, body: { currentPassword: 'nope', newPassword: 'Test@9876', confirmNewPassword: 'Test@9876' } });
+  check('POST /admin/change-password wrong current → 400', wrongCur.status === 400, `status=${wrongCur.status}`);
+  const samePw = await req('POST', '/admin/change-password', { token: managerToken, body: { currentPassword: 'test1234', newPassword: 'test1234', confirmNewPassword: 'test1234' } });
+  check('POST /admin/change-password same as current → 400', samePw.status === 400, `status=${samePw.status}`);
+  const pwOk = await req('POST', '/admin/change-password', { token: managerToken, body: { currentPassword: 'test1234', newPassword: 'Test@9876', confirmNewPassword: 'Test@9876' } });
+  check('POST /admin/change-password valid → requireRelogin', pwOk.status === 200 && pwOk.data.requireRelogin === true, `status=${pwOk.status}`);
+
+  const oldTokenDead = await req('GET', '/admin/me', { token: managerToken });
+  check('Old token rejected after password change → 401', oldTokenDead.status === 401, `status=${oldTokenDead.status}`);
+
+  const managerLogin2 = await req('POST', '/admin/login', { body: { email: newManagerEmail, password: 'Test@9876' } });
+  check('Login with new password works', managerLogin2.status === 200 && !!managerLogin2.data?.token);
+  managerToken = managerLogin2.data?.token || null;
+
+  // Avatar upload (all roles) + removal
+  const smokePng = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+    0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+    0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+  ]);
+  try {
+    const avatarUp = await rawMultipart('POST', '/admin/profile-picture', {
+      token: managerToken,
+      fieldName: 'file',
+      filename: 'smoke-avatar.png',
+      contentType: 'image/png',
+      data: smokePng,
+    });
+    check('POST /admin/profile-picture → avatar_url set',
+      avatarUp.status === 200 && avatarUp.data.avatar_url && avatarUp.data.avatar_url.includes('/uploads/'), `status=${avatarUp.status}`);
+    const meAvatar = await req('GET', '/admin/me', { token: managerToken });
+    check('GET /admin/me reflects avatar_url', meAvatar.status === 200 && meAvatar.data.avatar_url === avatarUp.data.avatar_url);
+
+    const avatarNoAuth = await rawMultipart('POST', '/admin/profile-picture', {
+      token: '',
+      fieldName: 'file',
+      filename: 'smoke-avatar.png',
+      contentType: 'image/png',
+      data: smokePng,
+    });
+    check('POST /admin/profile-picture without token → 401', avatarNoAuth.status === 401, `status=${avatarNoAuth.status}`);
+
+    const badUpload = await rawMultipart('POST', '/admin/profile-picture', {
+      token: managerToken,
+      fieldName: 'file',
+      filename: 'evil.txt',
+      contentType: 'text/plain',
+      data: Buffer.from('not an image'),
+    });
+    check('POST /admin/profile-picture non-image → 400', badUpload.status === 400, `status=${badUpload.status}`);
+
+    const delAvatar = await req('DELETE', '/admin/profile-picture', { token: managerToken });
+    check('DELETE /admin/profile-picture → avatar cleared', delAvatar.status === 200 && delAvatar.data.avatar_url === '', `status=${delAvatar.status}`);
+  } catch (e) {
+    check('Avatar upload flow', false, e.message);
+  }
+
   // 11c) FAQs
   const faqs = await req('GET', '/faqs');
   check('GET /faqs (public) → raw array', faqs.status === 200 && Array.isArray(faqs.data) && faqs.data.length > 0);
@@ -392,6 +538,10 @@ async function main() {
   if (smokeAppUser?.id) {
     const delAppUser = await req('DELETE', `/admin/users/${smokeAppUser.id}`, { token: authToken });
     check('DELETE approved applicant user', delAppUser.status === 200 && delAppUser.data.success === true);
+  }
+  if (createdApp?.id) {
+    const delApp = await req('DELETE', `/admin/applications/${createdApp.id}`, { token: authToken });
+    check('DELETE smoke application', delApp.status === 200 && delApp.data.success === true);
   }
   const subs2 = await req('GET', '/newsletter', { token: authToken });
   const smokeSub = subs2.data?.find((s) => s.email === 'smoke-sub@example.com');

@@ -49,4 +49,23 @@ export function publicUrl(filename) {
   return `${env.uploadPublicUrl}/uploads/${encodeURIComponent(filename)}`;
 }
 
+/**
+ * Best-effort removal of a previously uploaded file. Only ever deletes a file
+ * that resolves inside the uploads directory, so remote/external URLs are never
+ * touched.
+ */
+export function deleteUploadFile(urlOrName) {
+  try {
+    if (!urlOrName) return;
+    const filename = path.basename(String(urlOrName).split('/').pop() || '');
+    if (!filename) return;
+    const filePath = path.resolve(uploadsDir, filename);
+    if (filePath.startsWith(path.resolve(uploadsDir)) && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch {
+    /* best-effort */
+  }
+}
+
 export default upload;

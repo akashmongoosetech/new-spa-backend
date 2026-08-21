@@ -160,7 +160,7 @@ const THERAPISTS = [
     name: 'Rajesh Sharma',
     title: 'Senior Master Therapist & Certified Sports Specialist',
     experienceYears: 10,
-    bio: 'Certified neuromuscular practitioner specializing in Deep Tissue, Sports recovery, and Volcanic Hot Stone therapy with over 10 years experience catering to high-profile gentlemen in Mumbai.',
+    bio: 'Certified neuromuscular practitioner specializing in Deep Tissue, Sports recovery, and Volcanic Hot Stone therapy with over 10 years experience catering to high-profile gentlemen in Indore, Ujjain, Dewas.',
     specialties: ['Deep Tissue', 'Sports Therapy', 'Hot Stone', 'Myofascial Release'],
     imageUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=600&auto=format&fit=crop',
     rating: 5.0,
@@ -330,7 +330,7 @@ const BLOGS = [
     summary: 'Discover how traditional warm oil Abhyanga massage reduces stress hormones, improves joint longevity, and restores physical vitality.',
     content: "In today's fast-paced urban corporate environment, professionals frequently push physical and mental limits. Classical Abhyanga therapy is far more than a luxury indulgence; it is a critical health maintenance system. Classical Ayurvedic texts highlight how daily warm herbal oil friction nourishes body tissues, enhances lymphatic drainage, balances Vata dosha, and promotes deep REM sleep.",
     imageUrl: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?q=80&w=800&auto=format&fit=crop',
-    tags: ['Ayurveda', 'Abhyanga', 'Stress Management', 'Mumbai Wellness'],
+    tags: ['Ayurveda', 'Abhyanga', 'Stress Management', 'Indore, Ujjain, Dewas Wellness'],
     published: true,
   },
   {
@@ -370,7 +370,7 @@ const TESTIMONIALS = [
   },
   {
     name: 'Akash Verma',
-    role: 'Senior Software Architect, BKC Mumbai',
+    role: 'Senior Software Architect, BKC Indore, Ujjain, Dewas',
     rating: 5,
     comment: "Sitting 10 hours a day at my desk left my lower back and neck in terrible pain. Arjun's Kerala Oil therapy completely eliminated my stiffness. Highly recommended!",
     serviceTitle: 'Kerala Authentic Herbal Oil Massage',
@@ -386,7 +386,7 @@ const TESTIMONIALS = [
   },
   {
     name: 'Rohit Patel',
-    role: 'Entrepreneur, Powai Mumbai',
+    role: 'Entrepreneur, Powai Indore, Ujjain, Dewas',
     rating: 5,
     comment: 'Authentic Ayurvedic Abhyanga massage with genuine herbal oils. The therapists are extremely respectful, professional, and knowledgeable.',
     serviceTitle: 'Ayurvedic Abhyanga Massage',
