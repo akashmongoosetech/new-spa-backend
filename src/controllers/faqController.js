@@ -1,5 +1,5 @@
 import Faq from '../models/Faq.js';
-import { HttpError } from '../utils/api.js';
+import { HttpError, sendError } from '../utils/api.js';
 import { logAudit } from '../services/auditService.js';
 
 function serializeFaq(f) {
@@ -10,7 +10,8 @@ function serializeFaq(f) {
     answer: f.answer,
     category: f.category || 'general',
     order: f.order || 0,
-    active: f.active === false ? 0 : 1,
+    active: f.active === false || f.active === 0 ? 0 : 1,
+    isPublished: f.isPublished === true || f.isPublished === 1 ? 1 : 0,
   };
 }
 
@@ -21,11 +22,22 @@ function normalizeBody(b) {
   if (b.category !== undefined) out.category = b.category;
   if (b.order !== undefined) out.order = Number(b.order) || 0;
   if (b.active !== undefined) out.active = !(b.active === false || b.active === 0 || b.active === '0');
+  if (b.isPublished !== undefined) out.isPublished = b.isPublished === true || b.isPublished === 1 || b.isPublished === '1';
   return out;
 }
 
 export async function listFaqs(req, res) {
-  const query = req.query.all === '1' ? {} : { active: true };
+  const { published } = req.query || {};
+  
+  // published='all' → show all (admin); published=true/false → filter; undefined → active + published
+  const query = published === 'all'
+    ? {}
+    : published === 'true'
+      ? { isPublished: true }
+      : published === 'false'
+        ? { isPublished: false }
+        : { isPublished: true, active: true };
+  
   const items = await Faq.find(query).sort({ order: 1, createdAt: 1 }).lean();
   return res.json(items.map(serializeFaq));
 }
@@ -59,4 +71,18 @@ export async function deleteFaq(req, res) {
   return res.json({ success: true });
 }
 
-export default { listFaqs, createFaq, updateFaq, deleteFaq };
+export async function toggleFaqStatus(req, res) {
+  const item = await Faq.findById(req.params.id);
+  if (!item) throw new HttpError(404, 'FAQ not found');
+
+  // Authorization: Super Admin, Admin, or Manager only
+  if (req.user.role !== 'Super Admin' && req.user.role !== 'Admin' && req.user.role !== 'Manager') {
+    return sendError(res, 403, 'You do not have permission');
+  }
+
+  item.isPublished = !item.isPublished;
+  await item.save();
+  return res.json(serializeFaq(item.toObject()));
+}
+
+export default { listFaqs, createFaq, updateFaq, deleteFaq, toggleFaqStatus };
