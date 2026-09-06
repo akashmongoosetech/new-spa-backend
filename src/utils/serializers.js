@@ -171,6 +171,8 @@ export function serializeTestimonial(t) {
 }
 
 // ---------- Blog (mapBlogPost reads snake_case) ----------
+import { generateExcerptHtml, getExcerptLength } from './htmlTruncate.js';
+
 function readTimeDisplay(v) {
   if (v == null) return '';
   if (typeof v === 'number') return `${v} min read`;
@@ -181,6 +183,10 @@ function readTimeDisplay(v) {
 
 export function serializeBlogPost(b) {
   if (!b) return null;
+  
+  const excerptHtml = b.excerpt ? generateExcerptHtml(b.excerpt, getExcerptLength()) : '';
+  const safeExcerpt = b.excerpt ? generateExcerptHtml(b.excerpt, getExcerptLength()).replace(/<[^>]*>/g, '') : '';
+  
   return bothCase(
     {
       id: id(b),
@@ -188,16 +194,29 @@ export function serializeBlogPost(b) {
       slug: b.slug,
       category: b.category,
       author: b.author,
+      therapistName: b.therapistName || '',
+      therapistAvatarUrl: b.therapistAvatarUrl || '',
       date: b.date || b.createdAt || b.created_at,
       read_time: readTimeDisplay(b.readTime),
       excerpt: b.excerpt || b.summary || '',
+      excerpt_html: excerptHtml,
+      safe_excerpt: safeExcerpt,
       content: b.content,
       image_url: b.imageUrl || b.cover_image || '',
       cover_image: b.imageUrl || b.cover_image || '',
       tags: b.tags || [],
       published: b.published === false || b.published === 0 ? 0 : 1,
+      status: b.status || 'active',
+      feature_on_home_page: b.featureOnHomePage ? 1 : 0,
+      seo: {
+        meta_title: b.seo?.metaTitle || '',
+        meta_description: b.seo?.metaDescription || '',
+        keywords: b.seo?.keywords || [],
+      },
+      created_at: b.createdAt || b.created_at,
+      updated_at: b.updatedAt || b.updated_at,
     },
-    ['id', 'title', 'slug', 'category', 'author', 'date', 'read_time', 'excerpt', 'content', 'image_url', 'cover_image', 'tags', 'published']
+    ['id', 'title', 'slug', 'category', 'author', 'therapistName', 'therapistAvatarUrl', 'date', 'read_time', 'excerpt', 'excerpt_html', 'safe_excerpt', 'content', 'image_url', 'cover_image', 'tags', 'published', 'status', 'feature_on_home_page', 'seo', 'created_at', 'updated_at']
   );
 }
 
