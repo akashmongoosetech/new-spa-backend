@@ -15,6 +15,7 @@ router.post('/change-password', protect, asyncHandler(authController.changePassw
 router.get('/me', protect, asyncHandler(authController.getProfile));
 router.put('/profile', protect, asyncHandler(authController.updateProfile));
 router.post('/profile-picture', protect, uploadLimiter, upload.single('file'), asyncHandler(authController.uploadProfilePicture));
+router.put('/profile-picture/url', protect, uploadLimiter, asyncHandler(authController.setProfilePictureUrl));
 router.delete('/profile-picture', protect, asyncHandler(authController.deleteProfilePicture));
 
 export default router;

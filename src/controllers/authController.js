@@ -352,6 +352,53 @@ export async function uploadProfilePicture(req, res) {
   return res.json(serializeAdminUser(user.toObject()));
 }
 
+const AVATAR_URL_RE = /\.(jpe?g|png|webp|gif)(\?.*)?$/i;
+const LOOPBACK_HOST_RE = /^(localhost|.*\.localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\])$/i;
+
+function validateAvatarUrl(raw) {
+  const value = String(raw || '').trim();
+  if (!value) throw new HttpError(400, 'Image URL is required');
+  if (value.length > 2048) throw new HttpError(400, 'Image URL is too long');
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new HttpError(400, 'Invalid image URL');
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new HttpError(400, 'Image URL must use https');
+  }
+  const host = parsed.hostname.trim().toLowerCase();
+  if (!host || !host.includes('.') || LOOPBACK_HOST_RE.test(host)) {
+    throw new HttpError(400, 'Image URL host is not allowed');
+  }
+  if (!AVATAR_URL_RE.test(parsed.pathname)) {
+    throw new HttpError(400, 'Image URL must point to a JPEG, PNG, WebP or GIF image');
+  }
+  return value;
+}
+
+/**
+ * Set the profile picture from a remote https image URL (all roles).
+ * The URL is stored as-is — the server never fetches it, so there is no
+ * SSRF surface. A previous *local* upload is cleaned up; remote URLs are
+ * never passed to the file deleter.
+ */
+export async function setProfilePictureUrl(req, res) {
+  const avatarUrl = validateAvatarUrl(req.body && req.body.avatarUrl);
+  const user = await AdminUser.findById(req.user._id);
+  if (!user) throw new HttpError(404, 'User not found');
+
+  const previous = user.avatarUrl;
+  user.avatarUrl = avatarUrl;
+  await user.save();
+
+  await logAudit({ action: 'update', module: 'profile', details: 'Updated profile picture via URL', req });
+  if (previous) deleteUploadFile(previous);
+
+  return res.json(serializeAdminUser(user.toObject()));
+}
+
 export async function deleteProfilePicture(req, res) {
   const user = await AdminUser.findById(req.user._id);
   if (!user) throw new HttpError(404, 'User not found');
@@ -366,4 +413,4 @@ export async function deleteProfilePicture(req, res) {
   return res.json(serializeAdminUser(user.toObject()));
 }
 
-export default { login, signup, forgotPassword, resetPassword, changePassword, getProfile, updateProfile, uploadProfilePicture, deleteProfilePicture };
+export default { login, signup, forgotPassword, resetPassword, changePassword, getProfile, updateProfile, uploadProfilePicture, setProfilePictureUrl, deleteProfilePicture };

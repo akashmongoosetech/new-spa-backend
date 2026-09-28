@@ -467,6 +467,30 @@ async function main() {
 
     const delAvatar = await req('DELETE', '/admin/profile-picture', { token: managerToken });
     check('DELETE /admin/profile-picture → avatar cleared', delAvatar.status === 200 && delAvatar.data.avatar_url === '', `status=${delAvatar.status}`);
+
+    const urlAvatar = await req('PUT', '/admin/profile-picture/url', {
+      token: managerToken,
+      body: { avatarUrl: 'https://images.unsplash.com/photo-test.png?w=200' },
+    });
+    check('PUT /admin/profile-picture/url → avatar_url set',
+      urlAvatar.status === 200 && urlAvatar.data.avatar_url === 'https://images.unsplash.com/photo-test.png?w=200', `status=${urlAvatar.status}`);
+
+    for (const [label, body, want] of [
+      ['http URL → 400', { avatarUrl: 'http://example.com/a.png' }, 400],
+      ['javascript URL → 400', { avatarUrl: 'javascript:alert(1)' }, 400],
+      ['localhost URL → 400', { avatarUrl: 'https://localhost/a.png' }, 400],
+      ['non-image URL → 400', { avatarUrl: 'https://example.com/page.html' }, 400],
+      ['missing URL → 400', {}, 400],
+    ]) {
+      const r = await req('PUT', '/admin/profile-picture/url', { token: managerToken, body });
+      check(`PUT /admin/profile-picture/url ${label}`, r.status === want, `status=${r.status}`);
+    }
+
+    const urlNoAuth = await req('PUT', '/admin/profile-picture/url', { body: { avatarUrl: 'https://example.com/a.png' } });
+    check('PUT /admin/profile-picture/url without token → 401', urlNoAuth.status === 401, `status=${urlNoAuth.status}`);
+
+    const delUrlAvatar = await req('DELETE', '/admin/profile-picture', { token: managerToken });
+    check('DELETE clears URL avatar', delUrlAvatar.status === 200 && delUrlAvatar.data.avatar_url === '', `status=${delUrlAvatar.status}`);
   } catch (e) {
     check('Avatar upload flow', false, e.message);
   }
