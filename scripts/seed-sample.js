@@ -405,7 +405,7 @@ const COUPONS = [
     active: true,
   },
   {
-    code: 'AURA10',
+    code: 'TRIPOD10',
     discount: 10,
     discountType: 'percent',
     minAmount: 1500,

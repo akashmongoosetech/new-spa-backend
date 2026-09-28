@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "REST API for Aura Luxe Men's Spa & Wellness — matches the existing frontend contract.",
+  "description": "REST API for Tripod Wellness Men's Spa & Wellness — matches the existing frontend contract.",
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",

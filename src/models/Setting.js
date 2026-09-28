@@ -43,9 +43,9 @@ const settingSchema = new mongoose.Schema(
     currencySymbol: { type: String, default: '₹' },
     currencyCode: { type: String, default: 'INR' },
     googleMapsUrl: { type: String, default: 'https://www.google.com/maps/search/?api=1&query=Indore+Ujjain+Dewas' },
-    facebookUrl: { type: String, default: 'https://facebook.com/auraluxespa' },
-    instagramUrl: { type: String, default: 'https://instagram.com/auraluxespa' },
-    twitterUrl: { type: String, default: 'https://twitter.com/auraluxespa' },
+    facebookUrl: { type: String, default: 'https://facebook.com/tripodwellness' },
+    instagramUrl: { type: String, default: 'https://instagram.com/tripodwellness' },
+    twitterUrl: { type: String, default: 'https://twitter.com/tripodwellness' },
 
     smtpHost: { type: String, default: '' },
     smtpPort: { type: Number, default: 587 },
