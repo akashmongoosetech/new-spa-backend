@@ -58,3 +58,33 @@ export const uploadLimiter = limiter({
   max: 100,
   message: 'Too many uploads. Please try again later.',
 });
+
+export const aiLimiter = limiter({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  message: 'Too many AI requests. Please try again later.',
+});
+
+export const lookupLimiter = limiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Too many lookup attempts. Please try again later.',
+});
+
+export const availabilityLimiter = limiter({
+  windowMs: 60 * 60 * 1000,
+  max: 300,
+  message: 'Too many availability checks. Please try again later.',
+});
+
+export const reportLimiter = limiter({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: 'Too many export requests. Please try again later.',
+});
+
+export const replyLimiter = limiter({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  message: 'Too many replies. Please try again later.',
+});

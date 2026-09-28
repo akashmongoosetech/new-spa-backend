@@ -12,28 +12,34 @@ export async function subscribe(req, res) {
     throw new HttpError(400, 'Please provide a valid email address');
   }
 
-  let sub = await NewsletterSubscriber.findOne({ email });
-  if (!sub) {
-    sub = await NewsletterSubscriber.create({ email });
-    createNotification({
-      type: 'newsletter',
-      title: 'New newsletter subscriber',
-      message: email,
-      link: '',
-    });
-    getSettings().then((s) => {
-      sendNewsletterWelcome(s, { email }).catch(() => {});
-    });
-  } else if (sub.active === false) {
-    sub.active = true;
-    await sub.save();
+  try {
+    const sub = await NewsletterSubscriber.findOneAndUpdate(
+      { email },
+      { $setOnInsert: { email }, $set: { active: true } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    if (sub && sub.createdAt && Date.now() - new Date(sub.createdAt).getTime() < 5000) {
+      createNotification({ type: 'newsletter', title: 'New newsletter subscriber', message: email, link: '' });
+      getSettings().then((s) => { sendNewsletterWelcome(s, { email }).catch(() => {}); });
+    }
+  } catch (err) {
+    if (err.code === 11000) {
+      await NewsletterSubscriber.updateOne({ email }, { $set: { active: true } });
+    } else throw err;
   }
 
   return res.status(201).json({ success: true, message: 'Subscribed successfully' });
 }
 
+export async function unsubscribe(req, res) {
+  const email = String((req.body && req.body.email) || '').toLowerCase().trim();
+  if (!email) throw new HttpError(400, 'Email is required');
+  await NewsletterSubscriber.updateOne({ email }, { $set: { active: false } });
+  return res.json({ success: true, message: 'Unsubscribed successfully' });
+}
+
 export async function listSubscribers(req, res) {
-  const subs = await NewsletterSubscriber.find().sort({ createdAt: -1 }).lean();
+  const subs = await NewsletterSubscriber.find().sort({ createdAt: -1 }).limit(1000).lean();
   return res.json(subs.map(serializeNewsletterSubscriber));
 }
 
@@ -46,4 +52,4 @@ export async function deleteSubscriber(req, res) {
   return res.json({ success: true });
 }
 
-export default { subscribe, listSubscribers, deleteSubscriber };
+export default { subscribe, unsubscribe, listSubscribers, deleteSubscriber };

@@ -365,6 +365,13 @@ export function serializeScheduleConfig(s) {
 }
 
 // ---------- BusinessSettings (mapBusinessSettings reads camelCase) ----------
+export function serializePublicSettings(s) {
+  const full = serializeSettings(s);
+  if (!full) return null;
+  const { smtpHost, smtpPort, smtpUser, smtpSenderEmail, bookingEmailTemplate, contactEmailTemplate, ...rest } = full;
+  return { ...rest, smtpConfigured: Boolean(s && (s.smtpConfigured || s.smtpHost)) };
+}
+
 export function serializeSettings(s) {
   if (!s) return null;
   const seo = s.seo && typeof s.seo === 'object' ? s.seo : {};
@@ -391,7 +398,7 @@ export function serializeSettings(s) {
     smtpUser: s.smtpUser || '',
     smtpSenderName: s.smtpSenderName || 'Tripod Wellness Concierge',
     smtpSenderEmail: s.smtpSenderEmail || s.email || '',
-    smtpConfigured: s.smtpConfigured !== false,
+    smtpConfigured: Boolean(s.smtpConfigured) || false,
     bookingEmailTemplate: s.bookingEmailTemplate || '',
     contactEmailTemplate: s.contactEmailTemplate || '',
     bookingDurationMinutes: s.bookingDurationMinutes,
@@ -420,9 +427,9 @@ export function serializeSettings(s) {
     seo: seo,
     paymentGateways: {
       payAtVenue: paymentGateways.payAtVenue !== false,
-      upiQrCode: paymentGateways.upiQrCode !== false,
-      razorpayEnabled: paymentGateways.razorpayEnabled !== false,
-      stripeEnabled: paymentGateways.stripeEnabled !== false,
+      upiQrCode: paymentGateways.upiQrCode === true,
+      razorpayEnabled: paymentGateways.razorpayEnabled === true,
+      stripeEnabled: paymentGateways.stripeEnabled === true,
     },
   };
 }
@@ -445,4 +452,5 @@ export default {
   serializeLoginActivity,
   serializeScheduleConfig,
   serializeSettings,
+  serializePublicSettings,
 };

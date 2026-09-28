@@ -7,6 +7,6 @@ import { uploadLimiter } from '../config/rateLimiters.js';
 
 const router = Router();
 
-router.post('/', protect, authorize('Super Admin', 'Admin'), uploadLimiter, upload.single('file'), asyncHandler(uploadController.uploadFile));
+router.post('/', protect, authorize('Super Admin', 'Admin', 'Manager'), uploadLimiter, upload.single('file'), asyncHandler(uploadController.uploadFile));
 
 export default router;

@@ -27,11 +27,19 @@ const ALLOWED_STYLES = [
   'margin', 'padding', 'border', 'width', 'height',
 ];
 
+export function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 export function sanitizeHtml(html) {
   if (!html) return '';
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS,
     ALLOWED_ATTR: ALLOWED_ATTRS,
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+    ALLOW_DATA_ATTR: false,
+    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
     ALLOWED_STYLE: ALLOWED_STYLES,
     KEEP_CONTENT: true,
     RETURN_DOM: false,
@@ -48,4 +56,4 @@ export function calculateReadTime(html) {
   return minutes || 1;
 }
 
-export default { sanitizeHtml, calculateReadTime };
+export default { sanitizeHtml, escapeHtml, calculateReadTime };

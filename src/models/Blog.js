@@ -108,6 +108,5 @@ const blogSchema = new mongoose.Schema(
 
 blogSchema.index({ title: 'text', content: 'text', tags: 'text' });
 blogSchema.index({ status: 1, published: 1, featureOnHomePage: 1 });
-blogSchema.index({ slug: 1 });
 
 export default mongoose.model('BlogPost', blogSchema);

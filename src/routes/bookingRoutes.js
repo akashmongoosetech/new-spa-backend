@@ -3,13 +3,15 @@ import bookingController from '../controllers/bookingController.js';
 import asyncHandler from '../middleware/asyncHandler.js';
 import { protect, authorize } from '../middleware/auth.js';
 import validateObjectId from '../middleware/validateObjectId.js';
-import { bookingLimiter } from '../config/rateLimiters.js';
+import { bookingLimiter, lookupLimiter } from '../config/rateLimiters.js';
 
 const router = Router();
 
-// Public
+// Public (self-service; ownership proven via bookingNumber + email pair)
 router.post('/', bookingLimiter, asyncHandler(bookingController.createBooking));
-router.get('/lookup', asyncHandler(bookingController.lookupBooking));
+router.get('/lookup', lookupLimiter, asyncHandler(bookingController.lookupBooking));
+router.post('/public-cancel', bookingLimiter, asyncHandler(bookingController.publicCancelBooking));
+router.post('/public-reschedule', bookingLimiter, asyncHandler(bookingController.publicRescheduleBooking));
 
 // Admin (all staff roles can manage bookings)
 router.use(protect);

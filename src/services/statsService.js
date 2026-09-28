@@ -8,7 +8,7 @@ export async function getAdminStats() {
     await Promise.all([
       Setting.findOne({ key: 'default' }).lean(),
       Booking.aggregate([
-        { $match: { status: { $nin: ['cancelled', 'rejected'] } } },
+        { $match: { status: { $in: ['confirmed', 'completed'] }, paymentStatus: { $in: ['paid', 'completed'] } } },
         { $group: { _id: null, total: { $sum: '$totalPaid' }, count: { $sum: 1 } } },
       ]),
       Booking.countDocuments({ status: 'confirmed' }),

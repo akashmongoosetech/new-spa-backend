@@ -48,12 +48,16 @@ export async function sendEmail({ to, subject, html, type = 'booking_confirmatio
     return { success: false };
   }
 
-  const fromName = env.smtp.fromName || 'Tripod Wellness';
-  const fromAddress = env.smtp.from || env.adminEmail || 'noreply@tripodwellness.local';
+  const fromName = String(env.smtp.fromName || 'Tripod Wellness').replace(/["\r\n<>]/g, '').slice(0, 80) || 'Tripod Wellness';
+  const fromAddress = String(env.smtp.from || env.adminEmail || 'noreply@tripodwellness.local').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromAddress)) {
+    logger.error('email', 'Invalid sender address configured');
+    return { success: false };
+  }
   const mailOptions = {
     from: `"${fromName}" <${fromAddress}>`,
-    to,
-    subject,
+    to: String(to).slice(0, 320),
+    subject: String(subject || '').slice(0, 200),
     html,
   };
 
@@ -108,6 +112,8 @@ export async function sendBookingConfirmation(settings, booking) {
 }
 
 export async function sendBookingStatusUpdate(settings, booking) {
+  const status = String(booking.status || '');
+  if (!status) return { success: false };
   const html = templates.bookingStatusUpdate(settings, booking);
   return sendEmail({
     to: booking.email,
@@ -148,21 +154,31 @@ export async function sendNewsletterWelcome(settings, subscriber) {
   });
 }
 
+function resetExpiryLabel() {
+  const raw = String(env.resetTokenExpiresIn || '1h').trim().toLowerCase();
+  const m = raw.match(/^(\d+)\s*([smhd])$/);
+  if (!m) return '1 hour';
+  const n = Number(m[1]);
+  const unit = { s: 'second', m: 'minute', h: 'hour', d: 'day' }[m[2]];
+  return `${n} ${unit}${n === 1 ? '' : 's'}`;
+}
+
 export async function sendPasswordReset(to, resetUrl) {
   const settings = await getSettings();
-  const html = templates.passwordReset(settings, resetUrl);
+  const safeUrl = String(resetUrl || '').slice(0, 1000);
+  const html = templates.passwordReset(settings, safeUrl, resetExpiryLabel());
   return sendEmail({
     to,
     subject: 'Reset your password',
     html,
-    type: 'booking_status_update',
+    type: 'password_reset',
     skipLog: true, // reset emails are security-sensitive; keep them out of the log list
   });
 }
 
 export async function sendStaffApplicationApproved(to, name, role) {
   const settings = await getSettings();
-  const loginUrl = `${env.clientUrl}/admin-login`;
+  const loginUrl = `${String(env.clientUrl || '').split(',')[0].trim().replace(/\/$/, '')}/admin-login`;
   const html = templates.staffApplicationApproved(settings, { name, role, loginUrl });
   return sendEmail({
     to,

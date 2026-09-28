@@ -9,6 +9,7 @@ const router = Router();
 
 // Public
 router.post('/', newsletterLimiter, asyncHandler(newsletterController.subscribe));
+router.post('/unsubscribe', newsletterLimiter, asyncHandler(newsletterController.unsubscribe));
 
 // Admin
 router.use(protect);

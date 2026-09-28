@@ -225,11 +225,24 @@ async function main() {
   const bookingList = await req('GET', '/bookings', { token: authToken });
   check('GET /bookings (admin) → raw array', bookingList.status === 200 && Array.isArray(bookingList.data));
 
-  const lookup = await req('GET', `/bookings/lookup?q=${booking.data?.bookingNumber}`);
-  check('GET /bookings/lookup?q=bookingNumber', lookup.status === 200 && lookup.data.id === booking.data?.id, `status=${lookup.status}`);
+  const lookup = await req('GET', `/bookings/lookup?q=${booking.data?.bookingNumber}&email=smoke-customer@example.com`);
+  check('GET /bookings/lookup?q=ref&email', lookup.status === 200 && lookup.data.id === booking.data?.id, `status=${lookup.status}`);
+
+  const lookupNoEmail = await req('GET', `/bookings/lookup?q=${booking.data?.bookingNumber}`);
+  check('GET /bookings/lookup?q=ref w/o email → 400', lookupNoEmail.status === 400, `status=${lookupNoEmail.status}`);
 
   const lookup404 = await req('GET', '/bookings/lookup?q=NOPE-123456');
   check('GET /bookings/lookup (not found) → 404', lookup404.status === 404);
+
+  const pubResched = await req('POST', '/bookings/public-reschedule', {
+    body: { bookingNumber: booking.data?.bookingNumber, email: 'smoke-customer@example.com', date: futureDate(2), timeSlot: slot, therapistId: 'any' },
+  });
+  check('POST /bookings/public-reschedule', pubResched.status === 200 && pubResched.data.date === futureDate(2), `status=${pubResched.status} ${pubResched.data?.message || ''}`);
+
+  const pubCancel = await req('POST', '/bookings/public-cancel', {
+    body: { bookingNumber: booking.data?.bookingNumber, email: 'smoke-customer@example.com', reason: 'smoke test' },
+  });
+  check('POST /bookings/public-cancel', pubCancel.status === 200 && pubCancel.data.status === 'cancelled', `status=${pubCancel.status}`);
 
   const statusUpd = await req('PUT', `/bookings/${booking.data?.id}`, {
     token: authToken,

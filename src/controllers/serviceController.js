@@ -13,11 +13,29 @@ function normalizeBody(body) {
   if (b.shortDescription !== undefined) out.shortDescription = b.shortDescription;
   if (b.full_description !== undefined) out.fullDescription = b.full_description;
   if (b.fullDescription !== undefined) out.fullDescription = b.fullDescription;
-  if (b.price !== undefined) out.price = Number(b.price) || 0;
-  if (b.original_price !== undefined) out.originalPrice = Number(b.original_price) || null;
-  if (b.originalPrice !== undefined) out.originalPrice = Number(b.originalPrice) || null;
-  if (b.duration_minutes !== undefined) out.durationMinutes = Number(b.duration_minutes) || 60;
-  if (b.durationMinutes !== undefined) out.durationMinutes = Number(b.durationMinutes) || 60;
+  if (b.price !== undefined) {
+    const n = Number(b.price);
+    if (!Number.isFinite(n) || n < 0) throw new HttpError(400, 'Invalid price');
+    out.price = n;
+  }
+  if (b.original_price !== undefined) {
+    const n = Number(b.original_price);
+    out.originalPrice = Number.isFinite(n) && n >= 0 ? n : null;
+  }
+  if (b.originalPrice !== undefined) {
+    const n = Number(b.originalPrice);
+    out.originalPrice = Number.isFinite(n) && n >= 0 ? n : null;
+  }
+  if (b.duration_minutes !== undefined) {
+    const n = Number(b.duration_minutes);
+    if (!Number.isFinite(n) || n < 15 || n > 480) throw new HttpError(400, 'Invalid duration');
+    out.durationMinutes = n;
+  }
+  if (b.durationMinutes !== undefined) {
+    const n = Number(b.durationMinutes);
+    if (!Number.isFinite(n) || n < 15 || n > 480) throw new HttpError(400, 'Invalid duration');
+    out.durationMinutes = n;
+  }
   if (b.benefits !== undefined) out.benefits = b.benefits;
   if (b.included_items !== undefined) out.includedItems = b.included_items;
   if (b.includedItems !== undefined) out.includedItems = b.includedItems;
@@ -25,15 +43,25 @@ function normalizeBody(body) {
   if (b.imageUrl !== undefined) out.imageUrl = b.imageUrl;
   if (b.featured !== undefined) out.featured = b.featured === true || b.featured === 1 || b.featured === '1';
   if (b.active !== undefined) out.active = !(b.active === false || b.active === 0 || b.active === '0');
-  if (b.rating !== undefined) out.rating = Number(b.rating) || 0;
-  if (b.reviews_count !== undefined) out.reviewsCount = Number(b.reviews_count) || 0;
-  if (b.reviewsCount !== undefined) out.reviewsCount = Number(b.reviewsCount) || 0;
+  if (b.rating !== undefined) {
+    const n = Number(b.rating);
+    if (!Number.isFinite(n) || n < 0 || n > 5) throw new HttpError(400, 'Rating must be 0-5');
+    out.rating = n;
+  }
+  if (b.reviews_count !== undefined) {
+    const n = Number(b.reviews_count);
+    out.reviewsCount = Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+  }
+  if (b.reviewsCount !== undefined) {
+    const n = Number(b.reviewsCount);
+    out.reviewsCount = Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+  }
   if (b.faq !== undefined) out.faq = Array.isArray(b.faq) ? b.faq : [];
   return out;
 }
 
 export async function listServices(req, res) {
-  const services = await Service.find().sort({ createdAt: -1 }).lean();
+  const services = await Service.find().sort({ createdAt: -1 }).limit(500).lean();
   return res.json(services.map(serializeService));
 }
 
@@ -41,7 +69,8 @@ export async function createService(req, res) {
   const data = normalizeBody(req.body);
   if (!data.title) throw new HttpError(400, 'Service title is required');
 
-  const slug = req.body.slug ? req.body.slug : await uniqueSlug(Service, data.title);
+  const rawSlug = req.body.slug || req.body.slug === '' ? req.body.slug : null;
+  const slug = rawSlug ? String(rawSlug).toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').slice(0, 120) || await uniqueSlug(Service, data.title) : await uniqueSlug(Service, data.title);
   const service = await Service.create({ ...data, slug });
 
   await logAudit({ action: 'create', module: 'services', details: `Created service "${service.title}"`, req });

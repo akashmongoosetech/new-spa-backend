@@ -20,9 +20,33 @@ function normalizeBody(b) {
 }
 
 export async function listTestimonials(req, res) {
-  const query = req.query.all === '1' ? {} : { approved: true };
-  const items = await Testimonial.find(query).sort({ createdAt: -1 }).lean();
+  if (req.query.all === '1') {
+    const role = req.user && req.user.role;
+    if (!req.user || !['Super Admin', 'Admin'].includes(role)) {
+      throw new HttpError(403, 'You do not have permission to view unapproved testimonials');
+    }
+    const items = await Testimonial.find({}).sort({ createdAt: -1 }).limit(500).lean();
+    return res.json(items.map(serializeTestimonial));
+  }
+  const items = await Testimonial.find({ approved: true }).sort({ createdAt: -1 }).limit(200).lean();
   return res.json(items.map(serializeTestimonial));
+}
+
+export async function updateTestimonial(req, res) {
+  const item = await Testimonial.findById(req.params.id);
+  if (!item) throw new HttpError(404, 'Testimonial not found');
+  const b = req.body || {};
+  if (b.name !== undefined) item.name = String(b.name).slice(0, 120);
+  if (b.comment !== undefined) item.comment = String(b.comment).slice(0, 2000);
+  if (b.role !== undefined) item.role = String(b.role).slice(0, 120);
+  if (b.rating !== undefined) {
+    const r = Number(b.rating);
+    if (!Number.isFinite(r) || r < 1 || r > 5) throw new HttpError(400, 'Rating must be 1-5');
+    item.rating = r;
+  }
+  if (b.approved !== undefined) item.approved = b.approved === true || b.approved === 1 || b.approved === '1';
+  await item.save();
+  return res.json(serializeTestimonial(item.toObject()));
 }
 
 export async function createTestimonial(req, res) {
@@ -43,4 +67,4 @@ export async function deleteTestimonial(req, res) {
   return res.json({ success: true });
 }
 
-export default { listTestimonials, createTestimonial, deleteTestimonial };
+export default { listTestimonials, createTestimonial, updateTestimonial, deleteTestimonial };

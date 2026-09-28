@@ -4,7 +4,7 @@ import { HttpError } from '../utils/api.js';
 import { logAudit } from '../services/auditService.js';
 
 export async function listGallery(req, res) {
-  const items = await GalleryItem.find().sort({ createdAt: -1 }).lean();
+  const items = await GalleryItem.find().sort({ createdAt: -1 }).limit(500).lean();
   return res.json(items.map(serializeGalleryItem));
 }
 

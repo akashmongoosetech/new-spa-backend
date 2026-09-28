@@ -15,15 +15,27 @@ function dayOfWeek(dateStr) {
   return d.getDay();
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function toMinutes(t) {
+  const m = String(t || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return h * 60 + min;
+}
+
 function generateSlots(start, end, intervalMin) {
-  const [sh, sm] = start.split(':').map(Number);
-  const [eh, em] = end.split(':').map(Number);
+  const s = toMinutes(start);
+  const e = toMinutes(end);
+  const step = Number(intervalMin) > 0 ? Number(intervalMin) : 60;
+  if (s === null || e === null || e <= s) return [];
   const slots = [];
-  let cur = sh * 60 + sm;
-  const last = eh * 60 + em;
-  while (cur < last) {
+  let cur = s;
+  while (cur < e) {
     slots.push(`${pad(Math.floor(cur / 60))}:${pad(cur % 60)}`);
-    cur += intervalMin;
+    cur += step;
   }
   return slots;
 }
@@ -53,6 +65,12 @@ function isBlocked(config, dateStr) {
  * @param {string} therapistId  ObjectId or the literal 'any'
  */
 export async function getAvailableSlots(dateStr, therapistId = 'any') {
+  if (!DATE_RE.test(String(dateStr || ''))) return [];
+  // Reject past dates outright (today handled with time filtering below).
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  if (String(dateStr) < todayStr) return [];
+
   const config = await getConfig();
 
   if (isBlocked(config, dateStr)) {
@@ -74,7 +92,8 @@ export async function getAvailableSlots(dateStr, therapistId = 'any') {
 
   // 2) Therapist-specific filtering.
   if (therapistId && therapistId !== 'any') {
-    const therapist = await Therapist.findById(therapistId).lean();
+    let therapist = null;
+    try { therapist = await Therapist.findById(therapistId).lean(); } catch { therapist = null; }
     if (!therapist || therapist.active === false) {
       return [];
     }
@@ -92,15 +111,14 @@ export async function getAvailableSlots(dateStr, therapistId = 'any') {
     }
   }
 
-  // 3) Capacity check.
+  // 3) Capacity check — count ALL active bookings for the slot date/time
+  // regardless of therapist partition, so 'any' and specific bookings share capacity.
   const maxPerSlot = settings.maxBookingsPerSlot || 3;
-  const matchTherapist = therapistId === 'any' ? { therapistId: 'any' } : { therapistId: String(therapistId) };
   const taken = await Booking.find({
     date: dateStr,
     status: { $nin: ['cancelled', 'rejected'] },
-    ...matchTherapist,
   })
-    .select('timeSlot')
+    .select('timeSlot therapistId')
     .lean();
 
   const counts = {};
@@ -108,9 +126,8 @@ export async function getAvailableSlots(dateStr, therapistId = 'any') {
     counts[b.timeSlot] = (counts[b.timeSlot] || 0) + 1;
   }
 
-  // 4) Drop past slots on today.
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  // 4) Drop past slots on today (local time, consistent with todayStr above).
+  const nowMin = now.getHours() * 60 + now.getMinutes();
 
   const free = baseSlots.filter((slot) => {
     if ((counts[slot] || 0) >= maxPerSlot) return false;

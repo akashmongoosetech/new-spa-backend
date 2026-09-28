@@ -70,7 +70,10 @@ export const env = {
   },
 
   uploadPublicUrl: (process.env.UPLOAD_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, ''),
-  maxUploadSizeMb: parseInt(process.env.MAX_UPLOAD_SIZE_MB || '5', 10),
+  maxUploadSizeMb: (() => {
+    const n = parseInt(process.env.MAX_UPLOAD_SIZE_MB || '5', 10);
+    return Number.isFinite(n) && n > 0 && n <= 50 ? n : 5;
+  })(),
 };
 
 export default env;

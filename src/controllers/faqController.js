@@ -38,7 +38,7 @@ export async function listFaqs(req, res) {
         ? { isPublished: false }
         : { isPublished: true, active: true };
   
-  const items = await Faq.find(query).sort({ order: 1, createdAt: 1 }).lean();
+  const items = await Faq.find(query).sort({ order: 1, createdAt: 1 }).limit(500).lean();
   return res.json(items.map(serializeFaq));
 }
 

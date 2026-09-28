@@ -17,6 +17,11 @@ const galleryItemSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    categoryLabel: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     imageUrl: {
       type: String,
       required: true,

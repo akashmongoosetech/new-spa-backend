@@ -28,7 +28,7 @@ function normalizeBody(body) {
 }
 
 export async function listTherapists(req, res) {
-  const therapists = await Therapist.find().sort({ createdAt: -1 }).lean();
+  const therapists = await Therapist.find().sort({ createdAt: -1 }).limit(500).lean();
   return res.json(therapists.map(serializeTherapist));
 }
 

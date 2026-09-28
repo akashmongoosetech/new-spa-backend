@@ -38,8 +38,15 @@ function normalizeBody(b) {
 }
 
 export async function listBlogs(req, res) {
-  const query = req.query.all === '1' ? {} : { published: true, status: 'active' };
-  const posts = await BlogPost.find(query).sort({ createdAt: -1 }).lean();
+  if (req.query.all === '1') {
+    const role = req.user && req.user.role;
+    if (!req.user || !['Super Admin', 'Admin', 'Manager'].includes(role)) {
+      throw new HttpError(403, 'You do not have permission to view drafts');
+    }
+    const posts = await BlogPost.find({}).sort({ createdAt: -1 }).limit(500).lean();
+    return res.json(posts.map(serializeBlogPost));
+  }
+  const posts = await BlogPost.find({ published: true, status: 'active' }).sort({ createdAt: -1 }).limit(200).lean();
   return res.json(posts.map(serializeBlogPost));
 }
 

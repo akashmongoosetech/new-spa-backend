@@ -12,37 +12,67 @@ import { HttpError, sendError } from '../utils/api.js';
  * A 401 here makes the frontend clear its local auth state and redirect.
  */
 export async function protect(req, res, next) {
-  const header = req.headers.authorization || '';
-  if (!header.startsWith('Bearer ')) {
-    return sendError(res, 401, 'Not authorized — missing token');
-  }
-
-  const token = header.slice(7).trim();
-  if (!token) {
-    return sendError(res, 401, 'Not authorized — missing token');
-  }
-
-  let decoded;
   try {
-    decoded = jwt.verify(token, env.jwtSecret);
+    const header = req.headers.authorization || '';
+    if (!header.startsWith('Bearer ')) {
+      return sendError(res, 401, 'Not authorized — missing token');
+    }
+
+    const token = header.slice(7).trim();
+    if (!token) {
+      return sendError(res, 401, 'Not authorized — missing token');
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, env.jwtSecret);
+    } catch {
+      return sendError(res, 401, 'Session expired or invalid — please sign in again');
+    }
+    if (decoded.purpose && decoded.purpose !== 'session' && decoded.purpose !== undefined) {
+      // Reset tokens must never act as sessions (they carry purpose=password_reset).
+      if (decoded.purpose === 'password_reset') {
+        return sendError(res, 401, 'Not authorized — missing token');
+      }
+    }
+
+    const user = await AdminUser.findById(decoded.id).select('-password');
+    if (!user) {
+      return sendError(res, 401, 'Account not found');
+    }
+    if (user.active === false) {
+      return sendError(res, 401, 'Account is deactivated');
+    }
+    // Token version invalidation: password changes bump tokenVersion, killing old sessions.
+    if ((decoded.v || 0) !== (user.tokenVersion || 0)) {
+      return sendError(res, 401, 'Session expired — please sign in again');
+    }
+
+    req.user = user;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** Attach req.user when a valid Bearer token is present; otherwise continue public. */
+export async function optionalProtect(req, _res, next) {
+  try {
+    const header = req.headers.authorization || '';
+    if (!header.startsWith('Bearer ')) return next();
+    const token = header.slice(7).trim();
+    if (!token) return next();
+    let decoded;
+    try { decoded = jwt.verify(token, env.jwtSecret); } catch { return next(); }
+    if (decoded.purpose === 'password_reset') return next();
+    const user = await AdminUser.findById(decoded.id).select('-password');
+    if (!user || user.active === false) return next();
+    if ((decoded.v || 0) !== (user.tokenVersion || 0)) return next();
+    req.user = user;
+    return next();
   } catch {
-    return sendError(res, 401, 'Session expired or invalid — please sign in again');
+    return next();
   }
-
-  const user = await AdminUser.findById(decoded.id).select('-password');
-  if (!user) {
-    return sendError(res, 401, 'Account not found');
-  }
-  if (user.active === false) {
-    return sendError(res, 401, 'Account is deactivated');
-  }
-  // Token version invalidation: password changes bump tokenVersion, killing old sessions.
-  if ((decoded.v || 0) !== (user.tokenVersion || 0)) {
-    return sendError(res, 401, 'Session expired — please sign in again');
-  }
-
-  req.user = user;
-  return next();
 }
 
 /**
@@ -63,4 +93,4 @@ export function authorize(...roles) {
 
 export const ROLES = ['Super Admin', 'Admin', 'Manager', 'Receptionist'];
 
-export default { protect, authorize, ROLES };
+export default { protect, optionalProtect, authorize, ROLES };

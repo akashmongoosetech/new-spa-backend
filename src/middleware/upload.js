@@ -27,13 +27,38 @@ const storage = multer.diskStorage({
   },
 });
 
+const EXT_BY_MIME = new Map(ALLOWED);
+
 function fileFilter(req, file, cb) {
-  if (ALLOWED.has(file.mimetype)) {
-    return cb(null, true);
+  if (!ALLOWED.has(file.mimetype)) {
+    const err = new Error('Only image files are allowed (JPEG, PNG, WebP, GIF)');
+    err.status = 400;
+    return cb(err);
   }
-  const err = new Error('Only image files are allowed (JPEG, PNG, WebP, GIF)');
-  err.status = 400;
-  return cb(err);
+  const ext = String(file.originalname || '').toLowerCase().match(/\.(jpe?g|png|webp|gif)$/);
+  if (!ext) {
+    const err = new Error('File extension must match an image type (.jpg, .png, .webp, .gif)');
+    err.status = 400;
+    return cb(err);
+  }
+  return cb(null, true);
+}
+
+const MAGIC = [
+  { ext: '.jpg', sig: [[0xff, 0xd8, 0xff]] },
+  { ext: '.png', sig: [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]] },
+  { ext: '.gif', sig: [[0x47, 0x49, 0x46, 0x38]] },
+  { ext: '.webp', sig: [[0x52, 0x49, 0x46, 0x46]] },
+];
+
+export function isAllowedImageBuffer(buf, ext) {
+  if (!buf || buf.length < 12) return false;
+  const e = String(ext || '').toLowerCase();
+  if (e === '.jpg' || e === '.jpeg') return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  if (e === '.png') return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  if (e === '.gif') return buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46;
+  if (e === '.webp') return buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46;
+  return false;
 }
 
 export const upload = multer({

@@ -5,7 +5,9 @@ import Service from '../models/Service.js';
 import NewsletterSubscriber from '../models/NewsletterSubscriber.js';
 
 function escapeCsv(value) {
-  const s = value == null ? '' : String(value);
+  let s = value == null ? '' : String(value);
+  // Neutralize formula injection (Excel/Sheets) per OWASP.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   if (/[",\n\r]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`;
   }
@@ -17,8 +19,12 @@ function row(values) {
 }
 
 function dateStr(d) {
-  return d ? new Date(d).toISOString() : '';
+  if (!d) return '';
+  const dt = new Date(d);
+  return Number.isNaN(dt.getTime()) ? '' : dt.toISOString();
 }
+
+const MAX_EXPORT_ROWS = 5000;
 
 const BOOKING_HEADERS = [
   'BookingNumber', 'CustomerName', 'Email', 'Phone', 'Service', 'Therapist',
@@ -55,7 +61,7 @@ export async function exportBookingsCsv(type = 'all') {
     query.status = type;
   }
 
-  const bookings = await Booking.find(query).sort({ createdAt: -1 }).lean();
+  const bookings = await Booking.find(query).sort({ createdAt: -1 }).limit(MAX_EXPORT_ROWS).lean();
 
   const lines = [row(BOOKING_HEADERS)];
   for (const b of bookings) {
@@ -89,7 +95,7 @@ export async function exportBookingsCsv(type = 'all') {
 }
 
 export async function exportContactsCsv() {
-  const items = await ContactMessage.find().sort({ createdAt: -1 }).lean();
+  const items = await ContactMessage.find().sort({ createdAt: -1 }).limit(MAX_EXPORT_ROWS).lean();
 
   const lines = [row(CONTACT_HEADERS)];
   for (const c of items) {
@@ -114,7 +120,7 @@ export async function exportContactsCsv() {
 }
 
 export async function exportTherapistsCsv() {
-  const items = await Therapist.find().sort({ createdAt: -1 }).lean();
+  const items = await Therapist.find().sort({ createdAt: -1 }).limit(MAX_EXPORT_ROWS).lean();
 
   const lines = [row(THERAPIST_HEADERS)];
   for (const t of items) {
@@ -140,7 +146,7 @@ export async function exportTherapistsCsv() {
 }
 
 export async function exportServicesCsv() {
-  const items = await Service.find().sort({ createdAt: -1 }).lean();
+  const items = await Service.find().sort({ createdAt: -1 }).limit(MAX_EXPORT_ROWS).lean();
 
   const lines = [row(SERVICE_HEADERS)];
   for (const s of items) {
@@ -168,7 +174,7 @@ export async function exportServicesCsv() {
 }
 
 export async function exportSubscribersCsv() {
-  const items = await NewsletterSubscriber.find({ active: true }).sort({ createdAt: -1 }).lean();
+  const items = await NewsletterSubscriber.find({ active: true }).sort({ createdAt: -1 }).limit(MAX_EXPORT_ROWS).lean();
 
   const lines = [row(SUBSCRIBER_HEADERS)];
   for (const s of items) {

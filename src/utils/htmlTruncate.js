@@ -107,10 +107,15 @@ function truncateHtmlAtWordBoundary(html, maxLength) {
       }
       currentLength += text.length;
     } else if (node.nodeType === 1) { // Element node
-      // Process children
+      // Process children; once truncated, drop all following siblings.
       const children = Array.from(node.childNodes);
-      for (const child of children) {
-        if (truncateNode(child)) {
+      for (let i = 0; i < children.length; i += 1) {
+        if (currentLength >= maxLen) {
+          children[i].remove();
+          continue;
+        }
+        if (truncateNode(children[i])) {
+          for (let j = i + 1; j < children.length; j += 1) children[j].remove();
           return true;
         }
       }
@@ -132,7 +137,8 @@ function truncateHtmlAtWordBoundary(html, maxLength) {
  * Get excerpt length from environment or use default
  */
 export function getExcerptLength() {
-  return parseInt(process.env.EXCERPT_LENGTH || '200', 10);
+  const n = parseInt(process.env.EXCERPT_LENGTH || '200', 10);
+  return Number.isFinite(n) && n > 0 && n <= 2000 ? n : 200;
 }
 
 export default {

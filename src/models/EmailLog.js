@@ -14,7 +14,7 @@ const emailLogSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['booking_confirmation', 'contact_thankyou', 'newsletter_welcome', 'booking_status_update', 'booking_reminder'],
+      enum: ['booking_confirmation', 'contact_thankyou', 'newsletter_welcome', 'booking_status_update', 'booking_reminder', 'staff_application', 'password_reset'],
       default: 'booking_confirmation',
     },
     htmlContent: {

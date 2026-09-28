@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import blogController from '../controllers/blogController.js';
 import asyncHandler from '../middleware/asyncHandler.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, optionalProtect, authorize } from '../middleware/auth.js';
 import validateObjectId from '../middleware/validateObjectId.js';
 
 const router = Router();
@@ -11,8 +11,8 @@ router.get('/public', asyncHandler(blogController.getPublicBlogs));
 router.get('/featured', asyncHandler(blogController.getFeaturedBlogs));
 router.get('/slug/:slug', asyncHandler(blogController.getBlogBySlug));
 
-// Admin endpoints (with auth)
-router.get('/', asyncHandler(blogController.listBlogs));
+// List: public filtered view, or full drafts view when authed (?all=1 + role gate in controller)
+router.get('/', optionalProtect, asyncHandler(blogController.listBlogs));
 router.get('/:id', protect, authorize('Super Admin', 'Admin', 'Manager'), validateObjectId('id'), asyncHandler(blogController.getBlogById));
 router.post('/', protect, authorize('Super Admin', 'Admin', 'Manager'), asyncHandler(blogController.createBlog));
 router.put('/:id', protect, authorize('Super Admin', 'Admin', 'Manager'), validateObjectId('id'), asyncHandler(blogController.updateBlog));

@@ -24,7 +24,14 @@ async function start() {
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
+process.on('unhandledRejection', (err) => {
+  console.error('[server] Unhandled rejection:', err);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[server] Uncaught exception:', err);
+});
+
 start().catch((err) => {
-  console.error('[server] Failed to start:', err.message);
+  console.error('[server] Failed to start:', err);
   process.exit(1);
 });

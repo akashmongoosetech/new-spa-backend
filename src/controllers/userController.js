@@ -6,7 +6,7 @@ import { logAudit } from '../services/auditService.js';
 import { ROLES } from '../middleware/auth.js';
 
 export async function listUsers(req, res) {
-  const users = await AdminUser.find().sort({ createdAt: -1 }).lean();
+  const users = await AdminUser.find().sort({ createdAt: -1 }).limit(500).lean();
   return res.json(users.map(serializeAdminUser));
 }
 
@@ -22,7 +22,7 @@ function normalizeBody(body) {
   if (body.avatarUrl !== undefined || body.avatar_url !== undefined) {
     out.avatarUrl = body.avatarUrl || body.avatar_url || '';
   }
-  if (body.active !== undefined) out.active = body.active === true || body.active === 1;
+  if (body.active !== undefined) out.active = body.active === true || body.active === 1 || body.active === '1' || body.active === 'true';
   return out;
 }
 
@@ -31,8 +31,8 @@ export async function createUser(req, res) {
   if (!name || !email || !password) {
     throw new HttpError(400, 'Name, email and password are required');
   }
-  if (String(password).length < 6) {
-    throw new HttpError(400, 'Password must be at least 6 characters');
+  if (String(password).length < 8 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+    throw new HttpError(400, 'Password must be at least 8 characters with a letter and a number');
   }
   if (role === 'Super Admin' && req.user.role !== 'Super Admin') {
     throw new HttpError(403, 'Only a Super Admin can create Super Admin accounts');

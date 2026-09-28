@@ -9,7 +9,9 @@ import { sendPasswordReset } from '../services/emailService.js';
 import { createNotification } from '../services/notificationService.js';
 import { logAudit } from '../services/auditService.js';
 import { publicUrl, deleteUploadFile } from '../middleware/upload.js';
+import crypto from 'crypto';
 import { HttpError } from '../utils/api.js';
+import { verifyToken } from '../utils/generateToken.js';
 import env from '../config/env.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -111,10 +113,28 @@ export async function signup(req, res) {
   });
 }
 
+function firstClientOrigin() {
+  return String(env.clientUrl || '').split(',')[0].trim().replace(/\/$/, '') || 'http://localhost:5173';
+}
+
+function resetExpiryMs() {
+  const raw = String(env.resetTokenExpiresIn || '1h').trim().toLowerCase();
+  const m = raw.match(/^(\d+)\s*([smhd])$/);
+  if (!m) return 60 * 60 * 1000;
+  const n = parseInt(m[1], 10);
+  const mult = { s: 1000, m: 60 * 1000, h: 3600 * 1000, d: 24 * 3600 * 1000 }[m[2]];
+  return n * mult;
+}
+
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
 export async function forgotPassword(req, res) {
   const { email } = req.body || {};
-  if (!email) {
-    throw new HttpError(400, 'Email is required');
+  if (!email || !EMAIL_RE.test(String(email).trim())) {
+    // Uniform response to prevent account enumeration.
+    return res.json({ success: true, message: 'If that email exists, a reset link has been sent.' });
   }
 
   const user = await AdminUser.findOne({ email: String(email).toLowerCase().trim() });
@@ -124,11 +144,11 @@ export async function forgotPassword(req, res) {
   }
 
   const token = generateResetToken({ id: user._id.toString(), purpose: 'password_reset' });
-  user.resetPasswordToken = token;
-  user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000);
+  user.resetPasswordToken = hashResetToken(token);
+  user.resetPasswordExpires = new Date(Date.now() + resetExpiryMs());
   await user.save();
 
-  const resetUrl = `${env.clientUrl}/reset-password/${token}`;
+  const resetUrl = `${firstClientOrigin()}/reset-password/${token}`;
   const result = await sendPasswordReset(user.email, resetUrl);
 
   if (!result.success) {
@@ -139,20 +159,35 @@ export async function forgotPassword(req, res) {
 }
 
 export async function resetPassword(req, res) {
-  const { token, password } = req.body || {};
-  if (!token || !password) {
+  const { token, password, newPassword } = req.body || {};
+  const next = password || newPassword;
+  if (!token || !next) {
     throw new HttpError(400, 'Token and new password are required');
   }
-  if (String(password).length < 6) {
-    throw new HttpError(400, 'Password must be at least 6 characters');
+  if (String(next).length < 8 || !/[a-zA-Z]/.test(next) || !/\d/.test(next)) {
+    throw new HttpError(400, 'Password must be at least 8 characters with a letter and a number');
   }
 
-  const user = await AdminUser.findOne({ resetPasswordToken: token }).select('+password');
+  let decoded = null;
+  try {
+    decoded = verifyToken(token);
+  } catch {
+    throw new HttpError(400, 'Reset link is invalid or has expired');
+  }
+  if (!decoded || decoded.purpose !== 'password_reset' || !decoded.id) {
+    throw new HttpError(400, 'Reset link is invalid or has expired');
+  }
+
+  const hashed = hashResetToken(token);
+  const user = await AdminUser.findOne({
+    $or: [{ resetPasswordToken: hashed }, { resetPasswordToken: token }],
+    _id: decoded.id,
+  }).select('+password');
   if (!user || !user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
     throw new HttpError(400, 'Reset link is invalid or has expired');
   }
 
-  user.password = await hashPassword(password);
+  user.password = await hashPassword(next);
   user.resetPasswordToken = null;
   user.resetPasswordExpires = null;
   user.failedLoginAttempts = 0;

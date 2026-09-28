@@ -6,6 +6,6 @@ import { protect, authorize } from '../middleware/auth.js';
 const router = Router();
 
 router.get('/', protect, authorize('Super Admin', 'Admin', 'Manager', 'Receptionist'), asyncHandler(scheduleController.getSchedule));
-router.put('/', protect, authorize('Super Admin', 'Admin', 'Manager', 'Receptionist'), asyncHandler(scheduleController.updateSchedule));
+router.put('/', protect, authorize('Super Admin', 'Admin', 'Manager'), asyncHandler(scheduleController.updateSchedule));
 
 export default router;

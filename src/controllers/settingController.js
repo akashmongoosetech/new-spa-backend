@@ -1,5 +1,5 @@
 import Setting from '../models/Setting.js';
-import { serializeSettings } from '../utils/serializers.js';
+import { serializeSettings, serializePublicSettings } from '../utils/serializers.js';
 import { getSingletonSetting } from '../services/settingService.js';
 import { logAudit } from '../services/auditService.js';
 import env from '../config/env.js';
@@ -19,6 +19,13 @@ const FLAT_KEYS = [
 
 const SEO_KEYS = ['metaTitle', 'metaDescription', 'keywords', 'ogImage', 'twitterCard', 'enableJsonLd', 'robotsTxt'];
 const PG_KEYS = ['payAtVenue', 'upiQrCode', 'razorpayEnabled', 'stripeEnabled'];
+
+export async function getPublicSettings(req, res) {
+  const doc = await getSingletonSetting();
+  const obj = doc.toObject();
+  obj.smtpConfigured = Boolean(env.smtp.host) || Boolean(obj.smtpHost);
+  return res.json(serializePublicSettings(obj));
+}
 
 export async function getSettings(req, res) {
   const doc = await getSingletonSetting();
@@ -65,4 +72,4 @@ export async function updateSettings(req, res) {
   return res.json(serializeSettings(obj));
 }
 
-export default { getSettings, updateSettings };
+export default { getSettings, getPublicSettings, updateSettings };
