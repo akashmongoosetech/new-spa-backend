@@ -88,3 +88,15 @@ export const replyLimiter = limiter({
   max: 30,
   message: 'Too many replies. Please try again later.',
 });
+
+export const chatLimiter = limiter({
+  windowMs: 60 * 60 * 1000,
+  max: 40,
+  message: 'Too many chat messages. Please try again later.',
+});
+
+export const ragAdminLimiter = limiter({
+  windowMs: 60 * 60 * 1000,
+  max: 60,
+  message: 'Too many RAG admin requests. Please try again later.',
+});

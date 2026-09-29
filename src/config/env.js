@@ -66,7 +66,28 @@ export const env = {
 
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || '',
-    model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+    model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+  },
+
+  llm: {
+    provider: process.env.LLM_PROVIDER || 'gemini',
+    model: process.env.LLM_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+    apiKey: process.env.LLM_API_KEY || process.env.GEMINI_API_KEY || '',
+    maxOutputTokens: parseInt(process.env.CHAT_MAX_OUTPUT_TOKENS || '500', 10) || 500,
+    sseTimeoutMs: parseInt(process.env.CHAT_SSE_TIMEOUT_MS || '45000', 10) || 45000,
+  },
+
+  embeddings: {
+    provider: process.env.EMBEDDING_PROVIDER || 'gemini',
+    model: process.env.EMBEDDING_MODEL || 'gemini-embedding-001',
+  },
+
+  rag: {
+    vectorProvider: process.env.VECTOR_DB_PROVIDER || 'atlas',
+    topK: parseInt(process.env.RAG_TOP_K || '5', 10) || 5,
+    similarityThreshold: parseFloat(process.env.RAG_SIMILARITY_THRESHOLD || '0.72') || 0.72,
+    chunkSize: parseInt(process.env.RAG_CHUNK_SIZE || '500', 10) || 500,
+    chunkOverlap: parseInt(process.env.RAG_CHUNK_OVERLAP || '80', 10) || 80,
   },
 
   uploadPublicUrl: (process.env.UPLOAD_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, ''),

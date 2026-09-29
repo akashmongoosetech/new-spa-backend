@@ -1,6 +1,7 @@
 import env from '../config/env.js';
 import Service from '../models/Service.js';
 import Setting from '../models/Setting.js';
+import { generateResponse } from './llmService.js';
 
 function businessContext(settings) {
   return {
@@ -84,39 +85,13 @@ ${JSON.stringify(ctx.biz, null, 2)}
 SERVICE MENU:
 ${JSON.stringify(ctx.services, null, 2)}`;
 
-  const messages = [{ role: 'user', parts: [{ text: systemPrompt }] }];
-  const convo = history && Array.isArray(history) ? history : [];
-  for (const h of convo.slice(-6)) {
-    const sender = h.sender || h.role || 'user';
-    const role = sender === 'assistant' || sender === 'model' ? 'model' : 'user';
-    const text = String(h.content || h.text || '').slice(0, 1000);
-    if (!text.trim()) continue;
-    messages.push({ role, parts: [{ text }] });
-  }
-  messages.push({ role: 'user', parts: [{ text: String(message || '').slice(0, 1000) }] });
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.gemini.model)}:generateContent`;
-
   try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.gemini.apiKey },
-      body: JSON.stringify({ contents: messages, generationConfig: { maxOutputTokens: 300 } }),
-      signal: AbortSignal.timeout(15000),
+    const { text } = await generateResponse({
+      system: systemPrompt,
+      history,
+      message,
+      maxTokens: 300,
     });
-
-    if (!resp.ok) {
-      console.error(`[ai] Gemini HTTP ${resp.status}`);
-      return { reply: curatedReply(message, ctx), source: 'fallback' };
-    }
-
-    const data = await resp.json();
-    const text =
-      data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join(' ').trim() ||
-      '';
-    if (!text) {
-      return { reply: curatedReply(message, ctx), source: 'fallback' };
-    }
     return { reply: text, source: 'gemini' };
   } catch (err) {
     console.error('[ai] Gemini call failed:', err.message);

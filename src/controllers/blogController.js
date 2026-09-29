@@ -3,6 +3,7 @@ import { uniqueSlug } from '../utils/slugify.js';
 import { serializeBlogPost } from '../utils/serializers.js';
 import { HttpError } from '../utils/api.js';
 import { logAudit } from '../services/auditService.js';
+import { refreshSource } from '../services/ingestService.js';
 import { sanitizeHtml, calculateReadTime } from '../utils/sanitize.js';
 import { generateExcerpt, getExcerptLength } from '../utils/htmlTruncate.js';
 
@@ -105,6 +106,7 @@ export async function createBlog(req, res) {
   const post = await BlogPost.create({ ...data, slug });
 
   await logAudit({ action: 'create', module: 'blogs', details: `Created blog post "${post.title}"`, req });
+  refreshSource('blog');
   return res.status(201).json(serializeBlogPost(post.toObject()));
 }
 
@@ -135,6 +137,7 @@ export async function updateBlog(req, res) {
   await post.save();
 
   await logAudit({ action: 'update', module: 'blogs', details: `Updated blog post "${post.title}"`, req });
+  refreshSource('blog');
   return res.json(serializeBlogPost(post.toObject()));
 }
 
@@ -144,6 +147,7 @@ export async function deleteBlog(req, res) {
 
   await post.deleteOne();
   await logAudit({ action: 'delete', module: 'blogs', details: `Deleted blog post "${post.title}"`, req });
+  refreshSource('blog');
   return res.json({ success: true });
 }
 
@@ -158,6 +162,7 @@ export async function togglePublish(req, res) {
   await post.save();
 
   await logAudit({ action: post.published ? 'publish' : 'unpublish', module: 'blogs', details: `${post.published ? 'Published' : 'Unpublished'} blog post "${post.title}"`, req });
+  refreshSource('blog');
   return res.json(serializeBlogPost(post.toObject()));
 }
 
@@ -186,6 +191,7 @@ export async function toggleStatus(req, res) {
   await post.save();
 
   await logAudit({ action: post.status === 'active' ? 'activate' : 'deactivate', module: 'blogs', details: `${post.status === 'active' ? 'Activated' : 'Deactivated'} blog post "${post.title}"`, req });
+  refreshSource('blog');
   return res.json(serializeBlogPost(post.toObject()));
 }
 

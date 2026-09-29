@@ -32,6 +32,8 @@ import auditRoutes from './routes/auditRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
+import ragRoutes from './routes/ragRoutes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -82,6 +84,8 @@ api.use('/gallery', galleryRoutes);
 api.use('/settings', settingRoutes);
 api.use('/upload', uploadRoutes);
 api.use('/ai', aiRoutes);
+api.use('/ai/rag', chatRoutes);
+api.use('/admin/rag', ragRoutes);
 app.use('/api', api);
 
 // Frontend-friendly 404 + JSON error contract.

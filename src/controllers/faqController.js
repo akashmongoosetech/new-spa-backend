@@ -1,6 +1,7 @@
 import Faq from '../models/Faq.js';
 import { HttpError, sendError } from '../utils/api.js';
 import { logAudit } from '../services/auditService.js';
+import { refreshSource } from '../services/ingestService.js';
 
 function serializeFaq(f) {
   if (!f) return null;
@@ -49,6 +50,7 @@ export async function createFaq(req, res) {
   }
   const item = await Faq.create(data);
   await logAudit({ action: 'create', module: 'faqs', details: `Added FAQ: ${item.question}`, req });
+  refreshSource('faq');
   return res.status(201).json(serializeFaq(item.toObject()));
 }
 
@@ -59,6 +61,7 @@ export async function updateFaq(req, res) {
   Object.assign(item, normalizeBody(req.body));
   await item.save();
   await logAudit({ action: 'update', module: 'faqs', details: `Updated FAQ: ${item.question}`, req });
+  refreshSource('faq');
   return res.json(serializeFaq(item.toObject()));
 }
 
@@ -68,6 +71,7 @@ export async function deleteFaq(req, res) {
 
   await item.deleteOne();
   await logAudit({ action: 'delete', module: 'faqs', details: `Deleted FAQ: ${item.question}`, req });
+  refreshSource('faq');
   return res.json({ success: true });
 }
 
@@ -82,6 +86,7 @@ export async function toggleFaqStatus(req, res) {
 
   item.isPublished = !item.isPublished;
   await item.save();
+  refreshSource('faq');
   return res.json(serializeFaq(item.toObject()));
 }
 

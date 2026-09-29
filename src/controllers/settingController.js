@@ -2,6 +2,7 @@ import Setting from '../models/Setting.js';
 import { serializeSettings, serializePublicSettings } from '../utils/serializers.js';
 import { getSingletonSetting } from '../services/settingService.js';
 import { logAudit } from '../services/auditService.js';
+import { refreshSource } from '../services/ingestService.js';
 import env from '../config/env.js';
 
 const FLAT_KEYS = [
@@ -69,6 +70,7 @@ export async function updateSettings(req, res) {
   const obj = doc.toObject();
   obj.smtpConfigured = Boolean(env.smtp.host) || Boolean(obj.smtpHost);
   await logAudit({ action: 'update', module: 'settings', details: 'Updated business settings', req });
+  refreshSource('business');
   return res.json(serializeSettings(obj));
 }
 

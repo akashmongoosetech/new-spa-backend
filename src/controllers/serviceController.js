@@ -3,6 +3,7 @@ import { uniqueSlug } from '../utils/slugify.js';
 import { serializeService } from '../utils/serializers.js';
 import { HttpError } from '../utils/api.js';
 import { logAudit } from '../services/auditService.js';
+import { refreshSource } from '../services/ingestService.js';
 
 function normalizeBody(body) {
   const out = {};
@@ -74,6 +75,7 @@ export async function createService(req, res) {
   const service = await Service.create({ ...data, slug });
 
   await logAudit({ action: 'create', module: 'services', details: `Created service "${service.title}"`, req });
+  refreshSource('service');
   return res.status(201).json(serializeService(service.toObject()));
 }
 
@@ -92,6 +94,7 @@ export async function updateService(req, res) {
   await service.save();
 
   await logAudit({ action: 'update', module: 'services', details: `Updated service "${service.title}"`, req });
+  refreshSource('service');
   return res.json(serializeService(service.toObject()));
 }
 
@@ -101,6 +104,7 @@ export async function deleteService(req, res) {
 
   await service.deleteOne();
   await logAudit({ action: 'delete', module: 'services', details: `Deleted service "${service.title}"`, req });
+  refreshSource('service');
   return res.json({ success: true });
 }
 
