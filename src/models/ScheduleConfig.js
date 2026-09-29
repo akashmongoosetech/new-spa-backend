@@ -35,13 +35,14 @@ const scheduleConfigSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // Round-the-clock default: every hour of every open day is bookable.
     workingHoursStart: {
       type: String,
-      default: '09:00',
+      default: '00:00',
     },
     workingHoursEnd: {
       type: String,
-      default: '22:00',
+      default: '23:59',
     },
   },
   { timestamps: true }

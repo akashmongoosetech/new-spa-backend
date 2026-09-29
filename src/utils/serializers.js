@@ -359,8 +359,8 @@ export function serializeScheduleConfig(s) {
     emergencyClosure: s.emergencyClosure || false,
     emergencyClosureReason: s.emergencyClosureReason || '',
     timeSlots: s.timeSlots || [],
-    workingHoursStart: s.workingHoursStart || '09:00',
-    workingHoursEnd: s.workingHoursEnd || '22:00',
+    workingHoursStart: s.workingHoursStart || '00:00',
+    workingHoursEnd: s.workingHoursEnd || '23:59',
   };
 }
 
@@ -385,8 +385,8 @@ export function serializeSettings(s) {
     email: s.email || 'wellnesstripod@gmail.com',
     address: s.address || 'Indore, Ujjain, Dewas',
     city: s.city || 'Indore, Ujjain, Dewas',
-    workingHours: s.workingHours || s.openingHours || 'Mon - Sun: 09:00 AM - 10:00 PM IST',
-    openingHours: s.workingHours || s.openingHours || 'Mon - Sun: 09:00 AM - 10:00 PM IST',
+    workingHours: s.workingHours || s.openingHours || 'Open 24 hours, Mon - Sun (IST)',
+    openingHours: s.workingHours || s.openingHours || 'Open 24 hours, Mon - Sun (IST)',
     currencySymbol: s.currencySymbol || '₹',
     currencyCode: s.currencyCode || 'INR',
     googleMapsUrl: s.googleMapsUrl || 'https://www.google.com/maps/search/?api=1&query=Indore+Ujjain+Dewas',

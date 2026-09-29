@@ -47,13 +47,21 @@ async function seed() {
     console.log('[seed] Created default Setting document');
   }
 
-  // 3) ScheduleConfig singleton
+  // 3) ScheduleConfig singleton — round the clock by default
   const schedule = await ScheduleConfig.findOne({ key: 'default' });
   if (schedule) {
     console.log('[seed] ScheduleConfig document already exists');
   } else {
-    await ScheduleConfig.create({ key: 'default' });
-    console.log('[seed] Created default ScheduleConfig document');
+    await ScheduleConfig.create({
+      key: 'default',
+      workingHoursStart: '00:00',
+      workingHoursEnd: '23:59',
+      timeSlots: [],
+      blockedDates: [],
+      holidays: [],
+      emergencyClosure: false,
+    });
+    console.log('[seed] Created default 24x7 ScheduleConfig document');
   }
 
   await disconnectDB();

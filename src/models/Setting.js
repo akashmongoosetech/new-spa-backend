@@ -38,7 +38,7 @@ const settingSchema = new mongoose.Schema(
     email: { type: String, default: 'wellnesstripod@gmail.com' },
     address: { type: String, default: 'Indore, Ujjain, Dewas' },
     city: { type: String, default: 'Indore, Ujjain, Dewas' },
-    workingHours: { type: String, default: 'Mon - Sun: 09:00 AM - 10:00 PM IST' },
+    workingHours: { type: String, default: 'Open 24 hours, Mon - Sun (IST)' },
     openingHours: { type: String, default: '' },
     currencySymbol: { type: String, default: '₹' },
     currencyCode: { type: String, default: 'INR' },

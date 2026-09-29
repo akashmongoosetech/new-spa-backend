@@ -45,9 +45,11 @@ export async function updateSchedule(req, res) {
     if (!HHMM_RE.test(String(b.workingHoursEnd))) throw new HttpError(400, 'Invalid workingHoursEnd');
     doc.workingHoursEnd = b.workingHoursEnd;
   }
-  const s = doc.workingHoursStart || '09:00';
-  const e = doc.workingHoursEnd || '22:00';
-  if (s >= e) throw new HttpError(400, 'Opening time must be before closing time');
+  const s = doc.workingHoursStart || '00:00';
+  const e = doc.workingHoursEnd || '23:59';
+  // Round-the-clock days are expressed as 00:00–23:59 (start of day to end
+  // of day). Anything else still requires opening before closing.
+  if (s >= e) throw new HttpError(400, 'Opening time must be before closing time (use 00:00 – 23:59 for 24 hours)');
 
   await doc.save();
   await logAudit({ action: 'update', module: 'schedule', details: 'Updated schedule configuration', req });

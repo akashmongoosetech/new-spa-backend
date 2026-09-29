@@ -42,7 +42,7 @@ function generateSlots(start, end, intervalMin) {
 
 async function getConfig() {
   const c = await ScheduleConfig.findOne({ key: 'default' }).lean();
-  return c || { blockedDates: [], holidays: [], timeSlots: [], workingHoursStart: '09:00', workingHoursEnd: '22:00' };
+  return c || { blockedDates: [], holidays: [], timeSlots: [], workingHoursStart: '00:00', workingHoursEnd: '23:59' };
 }
 
 async function getSettings() {
@@ -84,8 +84,8 @@ export async function getAvailableSlots(dateStr, therapistId = 'any') {
   let baseSlots = (config.timeSlots || []).slice();
   if (baseSlots.length === 0) {
     baseSlots = generateSlots(
-      config.workingHoursStart || '09:00',
-      config.workingHoursEnd || '22:00',
+      config.workingHoursStart || '00:00',
+      config.workingHoursEnd || '23:59',
       interval
     );
   }
