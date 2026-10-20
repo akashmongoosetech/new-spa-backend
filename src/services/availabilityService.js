@@ -63,8 +63,9 @@ function isBlocked(config, dateStr) {
  *
  * @param {string} dateStr  e.g. '2026-08-20'
  * @param {string} therapistId  ObjectId or the literal 'any'
+ * @param {string|null} excludeBookingId  Ignore this booking (used when rescheduling)
  */
-export async function getAvailableSlots(dateStr, therapistId = 'any') {
+export async function getAvailableSlots(dateStr, therapistId = 'any', excludeBookingId = null) {
   if (!DATE_RE.test(String(dateStr || ''))) return [];
   // Reject past dates outright (today handled with time filtering below).
   const now = new Date();
@@ -111,19 +112,25 @@ export async function getAvailableSlots(dateStr, therapistId = 'any') {
     }
   }
 
-  // 3) Capacity check — count ALL active bookings for the slot date/time
-  // regardless of therapist partition, so 'any' and specific bookings share capacity.
+  // 3) Capacity check. The global per-slot cap still applies, but a specific
+  // therapist can never be double-booked in the same slot.
   const maxPerSlot = settings.maxBookingsPerSlot || 3;
+  const wantedTherapist = therapistId && therapistId !== 'any' ? String(therapistId) : null;
   const taken = await Booking.find({
     date: dateStr,
     status: { $nin: ['cancelled', 'rejected'] },
+    ...(excludeBookingId ? { _id: { $ne: excludeBookingId } } : {}),
   })
     .select('timeSlot therapistId')
     .lean();
 
   const counts = {};
+  const perTherapist = {};
   for (const b of taken) {
     counts[b.timeSlot] = (counts[b.timeSlot] || 0) + 1;
+    if (wantedTherapist && String(b.therapistId || 'any') === wantedTherapist) {
+      perTherapist[b.timeSlot] = (perTherapist[b.timeSlot] || 0) + 1;
+    }
   }
 
   // 4) Drop past slots on today (local time, consistent with todayStr above).
@@ -131,6 +138,7 @@ export async function getAvailableSlots(dateStr, therapistId = 'any') {
 
   const free = baseSlots.filter((slot) => {
     if ((counts[slot] || 0) >= maxPerSlot) return false;
+    if (wantedTherapist && (perTherapist[slot] || 0) >= 1) return false;
     if (dateStr === todayStr) {
       const [hh, mm] = slot.split(':').map(Number);
       if (hh * 60 + mm <= nowMin) return false;
@@ -141,4 +149,62 @@ export async function getAvailableSlots(dateStr, therapistId = 'any') {
   return free;
 }
 
-export default { getAvailableSlots };
+/**
+ * Capacity policy for a brand-new booking. Concurrent inserts all see the same
+ * pre-insert snapshot, so after writing we order the rows and let only the
+ * first `maxBookingsPerSlot` (and the first booking per therapist) survive.
+ * This keeps exactly the allowed number instead of rejecting every racer.
+ */
+export async function enforceNewBookingCapacity(bookingId, dateStr, timeSlot, therapistId = 'any') {
+  const settings = await getSettings();
+  const maxPerSlot = settings.maxBookingsPerSlot || 3;
+  const rows = await Booking.find({
+    date: dateStr,
+    timeSlot,
+    status: { $nin: ['cancelled', 'rejected'] },
+  })
+    .sort({ createdAt: 1, _id: 1 })
+    .select('_id therapistId')
+    .lean();
+
+  const rank = rows.findIndex((r) => String(r._id) === String(bookingId));
+  if (rank === -1 || rank >= maxPerSlot) return { ok: false, reason: 'slot_full' };
+
+  if (therapistId && therapistId !== 'any') {
+    const sameTherapist = rows.filter((r) => String(r.therapistId || 'any') === String(therapistId));
+    const therapistRank = sameTherapist.findIndex((r) => String(r._id) === String(bookingId));
+    if (therapistRank === -1 || therapistRank >= 1) return { ok: false, reason: 'therapist_busy' };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Re-check capacity after an update. Pass the booking's own id to exclude it.
+ * Returns { ok, reason } so callers can roll back a concurrent overbooking.
+ */
+export async function checkSlotCapacity(dateStr, timeSlot, therapistId = 'any', excludeBookingId = null) {
+  const settings = await getSettings();
+  const maxPerSlot = settings.maxBookingsPerSlot || 3;
+  const query = {
+    date: dateStr,
+    timeSlot,
+    status: { $nin: ['cancelled', 'rejected'] },
+  };
+  if (excludeBookingId) query._id = { $ne: excludeBookingId };
+
+  const total = await Booking.countDocuments(query);
+  if (total >= maxPerSlot) return { ok: false, reason: 'slot_full' };
+
+  if (therapistId && therapistId !== 'any') {
+    const sameTherapist = await Booking.countDocuments({
+      ...query,
+      therapistId: String(therapistId),
+    });
+    if (sameTherapist >= 1) return { ok: false, reason: 'therapist_busy' };
+  }
+
+  return { ok: true };
+}
+
+export default { getAvailableSlots, enforceNewBookingCapacity, checkSlotCapacity };

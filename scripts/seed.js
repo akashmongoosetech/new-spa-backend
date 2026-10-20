@@ -23,6 +23,9 @@ async function seed() {
 
   if (!seedEmail || !seedPassword) {
     console.warn('[seed] SKIPPED admin creation — set ADMIN_SEED_EMAIL and ADMIN_SEED_PASSWORD in backend/.env');
+  } else if (seedPassword.length < 8 || !/[a-zA-Z]/.test(seedPassword) || !/\d/.test(seedPassword)) {
+    console.error('[seed] SKIPPED admin creation — ADMIN_SEED_PASSWORD needs 8+ characters with a letter and a number');
+    process.exitCode = 1;
   } else {
     const existing = await AdminUser.findOne({ email: seedEmail.toLowerCase() });
     if (existing) {

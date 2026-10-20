@@ -368,7 +368,12 @@ export function serializeScheduleConfig(s) {
 export function serializePublicSettings(s) {
   const full = serializeSettings(s);
   if (!full) return null;
-  const { smtpHost, smtpPort, smtpUser, smtpSenderEmail, bookingEmailTemplate, contactEmailTemplate, ...rest } = full;
+  const {
+    smtpHost, smtpPort, smtpUser, smtpSenderEmail,
+    bookingEmailSubject, contactEmailSubject,
+    bookingEmailTemplate, contactEmailTemplate,
+    ...rest
+  } = full;
   return { ...rest, smtpConfigured: Boolean(s && (s.smtpConfigured || s.smtpHost)) };
 }
 
@@ -399,6 +404,8 @@ export function serializeSettings(s) {
     smtpSenderName: s.smtpSenderName || 'Tripod Wellness Concierge',
     smtpSenderEmail: s.smtpSenderEmail || s.email || '',
     smtpConfigured: Boolean(s.smtpConfigured) || false,
+    bookingEmailSubject: s.bookingEmailSubject || '',
+    contactEmailSubject: s.contactEmailSubject || '',
     bookingEmailTemplate: s.bookingEmailTemplate || '',
     contactEmailTemplate: s.contactEmailTemplate || '',
     bookingDurationMinutes: s.bookingDurationMinutes,

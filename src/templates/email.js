@@ -121,11 +121,15 @@ export function contactThankYou(settings, message) {
   return shell({ settings, title: `We received your message, ${message.name}`, body });
 }
 
-export function newsletterWelcome(settings, subscriber) {
+export function newsletterWelcome(settings, subscriber, unsubscribeUrl = '') {
+  const unsubscribe = unsubscribeUrl
+    ? `<p style="margin:20px 0 0;color:#6b7280;font-size:12px;">You received this email because you subscribed to our newsletter. <a href="${esc(unsubscribeUrl)}" style="color:#2CB5A0;">Unsubscribe</a>.</p>`
+    : '';
   const body = `
     <h2 style="margin:0 0 12px;color:#111827;">Welcome aboard!</h2>
     <p>Dear <strong>${esc(subscriber.email)}</strong>,</p>
     <p>Thanks for subscribing to ${esc(settings.businessName || 'Tripod Wellness')} updates. Expect offers, new-treatment announcements and wellness tips.</p>
+    ${unsubscribe}
   `;
   return shell({ settings, title: 'Welcome to our newsletter', body });
 }
@@ -171,4 +175,9 @@ export function staffApplicationRejected(settings, { name, reason }) {
   return shell({ settings, title: 'Update on your staff account application', body });
 }
 
-export default { bookingConfirmation, bookingStatusUpdate, bookingReminder, contactThankYou, newsletterWelcome, passwordReset, staffApplicationApproved, staffApplicationRejected };
+/** Wrap an admin-authored body fragment in the standard branded shell. */
+export function customEmail(settings, { title, body }) {
+  return shell({ settings, title, body });
+}
+
+export default { bookingConfirmation, bookingStatusUpdate, bookingReminder, contactThankYou, newsletterWelcome, passwordReset, staffApplicationApproved, staffApplicationRejected, customEmail };

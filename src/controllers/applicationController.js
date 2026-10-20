@@ -18,8 +18,8 @@ export async function submitApplication({ name, email, password, requestedRole, 
   if (!name || !email || !password) {
     throw new HttpError(400, 'Name, email and password are required');
   }
-  if (String(password).length < 6) {
-    throw new HttpError(400, 'Password must be at least 6 characters');
+  if (String(password).length < 8 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+    throw new HttpError(400, 'Password must be at least 8 characters with a letter and a number');
   }
   const cleanEmail = String(email).toLowerCase().trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
@@ -33,29 +33,57 @@ export async function submitApplication({ name, email, password, requestedRole, 
 
   const [existingUser, existingApp] = await Promise.all([
     AdminUser.findOne({ email: cleanEmail }),
-    StaffApplication.findOne({ email: cleanEmail, status: 'pending' }),
+    StaffApplication.findOne({ email: cleanEmail }),
   ]);
   if (existingUser) {
     throw new HttpError(400, 'An account with this email already exists');
   }
-  if (existingApp) {
+  if (existingApp && existingApp.status === 'pending') {
     throw new HttpError(400, 'An application for this email is already under review');
   }
 
-  const app = await StaffApplication.create({
-    name,
-    email: cleanEmail,
-    requestedRole: role,
-    passwordHash: await hashPassword(password),
-    note: String(note || '').slice(0, 1000),
-    status: 'pending',
-  });
+  const passwordHash = await hashPassword(password);
+  const cleanName = String(name).trim().slice(0, 120);
+  const cleanNote = String(note || '').slice(0, 1000);
+
+  // A rejected applicant may reapply. The unique email index stays intact:
+  // reuse the existing record and reset it back to pending.
+  if (existingApp) {
+    existingApp.name = cleanName;
+    existingApp.requestedRole = role;
+    existingApp.passwordHash = passwordHash;
+    existingApp.note = cleanNote;
+    existingApp.status = 'pending';
+    existingApp.reviewNote = '';
+    existingApp.reviewedBy = null;
+    existingApp.reviewedAt = null;
+    await existingApp.save();
+  }
+
+  let app = existingApp;
+  if (!app) {
+    try {
+      app = await StaffApplication.create({
+        name: cleanName,
+        email: cleanEmail,
+        requestedRole: role,
+        passwordHash,
+        note: cleanNote,
+        status: 'pending',
+      });
+    } catch (err) {
+      if (err && err.code === 11000) {
+        throw new HttpError(400, 'An application for this email is already under review');
+      }
+      throw err;
+    }
+  }
 
   await createNotification({
     type: 'info',
     title: 'New staff application',
-    message: `${name} (${cleanEmail}) applied for ${role} access`,
-    link: '/admin/applications',
+    message: `${cleanName} (${cleanEmail}) applied for ${role} access`,
+    link: 'applications',
   });
 
   return app;
@@ -117,7 +145,7 @@ export async function approveApplication(req, res) {
     type: 'info',
     title: 'Staff application approved',
     message: `${app.name} (${app.email}) is now an active ${app.requestedRole}`,
-    link: '/admin/users',
+    link: 'users',
     createdBy: req.user._id,
   });
 

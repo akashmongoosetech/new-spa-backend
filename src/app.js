@@ -39,13 +39,23 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
-app.set('trust proxy', 1);
+app.set('trust proxy', env.trustProxy);
 
 // Uploads are public assets meant to be embedded cross-origin (the frontend
 // runs on a different origin in dev and may be hosted separately in prod).
 // Helmet's default same-origin CORP would make browsers block them with
 // ERR_BLOCKED_BY_RESPONSE, so relax it globally to cross-origin.
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    // CSP is report-only until the frontend policy has been validated against
+    // real traffic. Other Helmet headers remain enforced.
+    contentSecurityPolicy: {
+      useDefaults: true,
+      reportOnly: true,
+    },
+  })
+);
 app.use(corsMiddleware);
 
 app.use(express.json({ limit: '2mb' }));

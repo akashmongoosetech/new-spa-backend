@@ -1,9 +1,11 @@
 import app from './app.js';
 import env from './config/env.js';
 import { connectDB, disconnectDB } from './config/db.js';
+import { startReminderScheduler } from './services/reminderScheduler.js';
 
 async function start() {
   await connectDB();
+  const stopReminderScheduler = startReminderScheduler();
 
   const server = app.listen(env.port, () => {
     console.log(`[server] Tripod Wellness API listening on http://localhost:${env.port}`);
@@ -12,6 +14,7 @@ async function start() {
 
   const shutdown = async (signal) => {
     console.log(`\n[server] ${signal} received — shutting down gracefully...`);
+    stopReminderScheduler();
     server.close(async () => {
       await disconnectDB();
       process.exit(0);

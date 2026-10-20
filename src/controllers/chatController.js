@@ -30,7 +30,40 @@ function cleanHistory(history) {
 }
 
 function sse(res, event, data) {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  if (res.writableEnded || res.destroyed) return;
+  try {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    // Flush per event when the framework/host supports it (compression/proxy).
+    if (typeof res.flush === 'function') res.flush();
+  } catch {
+    // The socket can disappear between the guards and the write; the request
+    // close handler will abort the generation.
+  }
+}
+
+function startSse(res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+  // Idle proxies (nginx/Cloudflare) drop silent connections; send a comment
+  // every 15s until the stream is finished.
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded || res.destroyed) return;
+    try {
+      res.write(': keep-alive\n\n');
+    } catch {
+      /* socket closed; the request handler will finish */
+    }
+  }, 15000);
+  if (typeof heartbeat.unref === 'function') heartbeat.unref();
+  const stop = () => clearInterval(heartbeat);
+  res.once('close', stop);
+  res.once('finish', stop);
+  return stop;
 }
 
 /**
@@ -68,12 +101,7 @@ export async function chatStream(req, res) {
       latencyMs: Date.now() - started,
       lowConfidence: true,
     });
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    });
+    const stopSse = startSse(res);
     sse(res, 'done', {
       conversationId: convo.conversationId,
       answer,
@@ -81,17 +109,14 @@ export async function chatStream(req, res) {
       confidence: plan.confidence,
       grounded: false,
     });
+    stopSse();
     return res.end();
   }
 
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache, no-transform',
-    Connection: 'keep-alive',
-    'X-Accel-Buffering': 'no',
-  });
+  const stopSse = startSse(res);
 
   let full = '';
+  let streamed = '';
   let tokens = null;
   let llmLatency = 0;
   // Abort generation (and stop token spend) when the client disconnects.
@@ -100,22 +125,39 @@ export async function chatStream(req, res) {
     if (!res.writableEnded) clientAbort.abort();
   });
   try {
-    const r = await streamAnswer(plan, text, clean, (tok) => sse(res, 'token', { text: tok }), clientAbort.signal);
+    const r = await streamAnswer(
+      plan,
+      text,
+      clean,
+      (tok) => {
+        streamed += tok;
+        sse(res, 'token', { text: tok });
+      },
+      clientAbort.signal
+    );
     // streamAnswer resolves with full text; tokens streamed incrementally above.
     full = r.text;
     llmLatency = r.latencyMs;
   } catch (err) {
+    if (clientAbort.signal.aborted) {
+      stopSse();
+      return res.end();
+    }
     logger.error('rag', 'LLM stream failed', err);
-    // Fall back to single-shot inside the stream lifetime.
+    // Fall back to single-shot inside the stream lifetime. Only send the
+    // suffix that was not already streamed, so the client never sees a
+    // duplicated answer.
     try {
       const one = await answerTurn(plan, text, clean);
       full = one.text;
       tokens = one.tokens;
       llmLatency = one.latencyMs;
-      sse(res, 'token', { text: full });
+      const remaining = streamed && full.startsWith(streamed) ? full.slice(streamed.length) : streamed ? '' : full;
+      if (remaining) sse(res, 'token', { text: remaining });
     } catch (err2) {
       logger.error('rag', 'LLM fallback failed', err2);
       sse(res, 'error', { message: 'Assistant is temporarily unavailable. Please try again shortly.' });
+      stopSse();
       return res.end();
     }
   }
@@ -144,6 +186,7 @@ export async function chatStream(req, res) {
     latencyMs: totalLatency,
     llmLatencyMs: llmLatency,
   });
+  stopSse();
   return res.end();
 }
 

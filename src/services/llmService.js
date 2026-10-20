@@ -12,9 +12,11 @@ function headers() {
 }
 
 function extractText(data) {
-  return (
-    data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join(' ').trim() || ''
-  );
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return '';
+  // Preserve whitespace exactly: streaming chunks often begin with a space,
+  // and trimming each chunk would merge adjacent words ("Hello" + " world").
+  return parts.map((p) => p.text || '').join('');
 }
 
 function toContents(history, message) {
@@ -57,7 +59,7 @@ export async function generateResponse({ system, history, message, maxTokens }) 
     throw new Error(`LLM HTTP ${resp.status}`);
   }
   const data = await resp.json();
-  const text = extractText(data);
+  const text = extractText(data).trim();
   if (!text) throw new Error('Empty LLM response');
   return { text, latencyMs: Date.now() - started, tokens: data?.usageMetadata?.totalTokenCount || null };
 }
@@ -96,6 +98,25 @@ export async function streamResponse({ system, history, message, maxTokens, onTo
     const decoder = new TextDecoder();
     let buf = '';
     let full = '';
+    const consume = (part) => {
+      // Gemini SSE uses one or more `data:` lines per event; join them.
+      const payload = part
+        .split(/\r?\n/)
+        .filter((l) => l.startsWith('data:'))
+        .map((l) => l.slice(5).replace(/^ /, ''))
+        .join('\n')
+        .trim();
+      if (!payload || payload === '[DONE]') return;
+      try {
+        const text = extractText(JSON.parse(payload));
+        if (text) {
+          full += text;
+          if (onToken) onToken(text);
+        }
+      } catch {
+        /* skip malformed chunk */
+      }
+    };
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -103,22 +124,10 @@ export async function streamResponse({ system, history, message, maxTokens, onTo
       // Gemini SSE uses \r\n line endings, so split on either flavour.
       const parts = buf.split(/\r?\n\r?\n/);
       buf = parts.pop() || '';
-      for (const part of parts) {
-        const line = part.trim().split('\n').find((l) => l.startsWith('data:'));
-        if (!line) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === '[DONE]') continue;
-        try {
-          const text = extractText(JSON.parse(payload));
-          if (text) {
-            full += (full ? ' ' : '') + text;
-            if (onToken) onToken(text);
-          }
-        } catch {
-          /* skip malformed chunk */
-        }
-      }
+      for (const part of parts) consume(part);
     }
+    buf += decoder.decode();
+    if (buf.trim()) consume(buf);
     if (!full.trim()) throw new Error('Empty LLM stream');
     return { text: full.trim(), latencyMs: Date.now() - started };
   } finally {

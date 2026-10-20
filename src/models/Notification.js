@@ -16,9 +16,23 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // Legacy/global flag. New notifications track reads per staff member in
+    // `readBy` so one admin marking an item read does not hide it for others.
     isRead: {
       type: Boolean,
       default: false,
+    },
+    readBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'AdminUser',
+      },
+    ],
+    // null = visible to all staff. Set this for personal security notices.
+    recipientId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AdminUser',
+      default: null,
     },
     link: {
       type: String,

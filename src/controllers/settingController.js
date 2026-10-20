@@ -10,6 +10,7 @@ const FLAT_KEYS = [
   'city', 'workingHours', 'openingHours', 'currencySymbol', 'currencyCode',
   'googleMapsUrl', 'facebookUrl', 'instagramUrl', 'twitterUrl',
   'smtpHost', 'smtpPort', 'smtpUser', 'smtpSenderName', 'smtpSenderEmail',
+  'bookingEmailSubject', 'contactEmailSubject',
   'bookingEmailTemplate', 'contactEmailTemplate',
   'bookingDurationMinutes', 'maxDailyBookings', 'maxBookingsPerSlot',
   'slotIntervalMinutes', 'autoApproveBookings', 'advanceBookingDays',

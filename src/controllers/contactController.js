@@ -6,7 +6,8 @@ import { sendContactThankYou, getSettings } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const STATUSES = ['new', 'read', 'replied', 'archived'];
+// Keep this list in sync with ContactMessage's schema enum.
+const STATUSES = ['new', 'read', 'in_progress', 'replied', 'closed'];
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

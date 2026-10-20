@@ -8,7 +8,7 @@ import { submitApplication } from './applicationController.js';
 import { sendPasswordReset } from '../services/emailService.js';
 import { createNotification } from '../services/notificationService.js';
 import { logAudit } from '../services/auditService.js';
-import { publicUrl, deleteUploadFile } from '../middleware/upload.js';
+import { publicUrl, deleteUploadFile, validateUploadedImageFile } from '../middleware/upload.js';
 import crypto from 'crypto';
 import { HttpError } from '../utils/api.js';
 import { verifyToken } from '../utils/generateToken.js';
@@ -47,6 +47,14 @@ async function logLogin({ user, req, status }) {
 async function getMaxAttempts() {
   const s = await Setting.findOne({ key: 'default' }).lean();
   return (s && s.maxLoginAttempts) || 5;
+}
+
+async function getSessionTimeoutMinutes() {
+  const s = await Setting.findOne({ key: 'default' }).lean();
+  const n = Number(s && s.sessionTimeoutMinutes);
+  // Only honor sane values; otherwise fall back to the env-configured expiry.
+  if (Number.isFinite(n) && n >= 5 && n <= 60 * 24 * 30) return n;
+  return null;
 }
 
 export async function login(req, res) {
@@ -94,7 +102,11 @@ export async function login(req, res) {
 
   await logLogin({ user, req, status: 'success' });
 
-  const token = generateToken(user);
+  // Enforce the admin-configured session lifetime (Setting.sessionTimeoutMinutes).
+  const sessionMinutes = await getSessionTimeoutMinutes();
+  const token = sessionMinutes
+    ? generateToken(user, { expiresIn: `${sessionMinutes}m` })
+    : generateToken(user);
   return res.json({ token, user: serializeAdminUser(user.toObject()) });
 }
 
@@ -200,6 +212,7 @@ export async function resetPassword(req, res) {
     title: 'Password changed',
     message: `Password for ${user.email} was reset successfully.`,
     createdBy: user._id,
+    recipientId: user._id,
   });
 
   return res.json({ success: true, message: 'Password updated. You can now sign in.' });
@@ -240,6 +253,7 @@ export async function changePassword(req, res) {
     title: 'Password changed',
     message: `Password for ${user.email} was changed.`,
     createdBy: user._id,
+    recipientId: user._id,
   });
 
   return res.json({ success: true, message: 'Password changed successfully. Please sign in again.', requireRelogin: true });
@@ -315,6 +329,7 @@ export async function updateProfile(req, res) {
     updates.gender = gender;
   }
 
+  let emailChanged = false;
   if (body.email !== undefined) {
     const email = String(body.email).toLowerCase().trim();
     if (!EMAIL_RE.test(email)) throw new HttpError(400, 'Invalid email address');
@@ -324,23 +339,31 @@ export async function updateProfile(req, res) {
       const exists = await AdminUser.findOne({ email, _id: { $ne: user._id } });
       if (exists) throw new HttpError(400, 'An account with this email already exists');
       updates.email = email;
+      emailChanged = true;
     }
   }
 
   Object.assign(user, updates);
+  // Changing the login identity invalidates every existing session.
+  if (emailChanged) user.tokenVersion = (user.tokenVersion || 0) + 1;
   await user.save();
 
   await logAudit({ action: 'update', module: 'profile', details: `Updated own profile (${user.email})`, req });
 
-  return res.json(serializeAdminUser(user.toObject()));
+  return res.json({ ...serializeAdminUser(user.toObject()), requireRelogin: emailChanged });
 }
 
 export async function uploadProfilePicture(req, res) {
   if (!req.file) {
     throw new HttpError(400, 'No file uploaded — use multipart/form-data with field "file"');
   }
+  // Validate the actual bytes (not just the client-supplied MIME type).
+  validateUploadedImageFile(req.file);
   const user = await AdminUser.findById(req.user._id);
-  if (!user) throw new HttpError(404, 'User not found');
+  if (!user) {
+    deleteUploadFile(req.file.filename);
+    throw new HttpError(404, 'User not found');
+  }
 
   const previous = user.avatarUrl;
   user.avatarUrl = publicUrl(req.file.filename);

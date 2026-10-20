@@ -62,7 +62,10 @@ function normalizeBody(body) {
 }
 
 export async function listServices(req, res) {
-  const services = await Service.find().sort({ createdAt: -1 }).limit(500).lean();
+  // Public visitors only see bookable services. Authenticated staff see the
+  // full catalogue (including inactive/archived records) for management.
+  const query = req.user ? {} : { active: true };
+  const services = await Service.find(query).sort({ createdAt: -1 }).limit(500).lean();
   return res.json(services.map(serializeService));
 }
 

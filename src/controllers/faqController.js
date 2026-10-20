@@ -29,16 +29,24 @@ function normalizeBody(b) {
 
 export async function listFaqs(req, res) {
   const { published } = req.query || {};
-  
-  // published='all' → show all (admin); published=true/false → filter; undefined → active + published
+
+  // Draft/unpublished views are staff-only. Without this gate, anyone could
+  // read unpublished FAQs with ?published=all (or drafts with =false).
+  const wantsUnpublished = published === 'all' || published === 'false';
+  if (wantsUnpublished) {
+    const role = req.user && req.user.role;
+    if (!req.user || !['Super Admin', 'Admin', 'Manager'].includes(role)) {
+      throw new HttpError(403, 'You do not have permission to view unpublished FAQs');
+    }
+  }
+
+  // Public semantics: only published AND active. Staff `all` sees everything.
   const query = published === 'all'
     ? {}
-    : published === 'true'
-      ? { isPublished: true }
-      : published === 'false'
-        ? { isPublished: false }
-        : { isPublished: true, active: true };
-  
+    : published === 'false'
+      ? { isPublished: false }
+      : { isPublished: true, active: true };
+
   const items = await Faq.find(query).sort({ order: 1, createdAt: 1 }).limit(500).lean();
   return res.json(items.map(serializeFaq));
 }

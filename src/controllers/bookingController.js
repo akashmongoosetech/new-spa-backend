@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import Booking from '../models/Booking.js';
 import Service from '../models/Service.js';
 import Therapist from '../models/Therapist.js';
@@ -5,10 +6,11 @@ import Coupon from '../models/Coupon.js';
 import Setting from '../models/Setting.js';
 import { serializeBooking } from '../utils/serializers.js';
 import { HttpError } from '../utils/api.js';
-import { getAvailableSlots } from '../services/availabilityService.js';
+import { getAvailableSlots, enforceNewBookingCapacity, checkSlotCapacity } from '../services/availabilityService.js';
 import { createNotification } from '../services/notificationService.js';
 import { sendBookingConfirmation, sendBookingStatusUpdate, sendBookingReminder, getSettings } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
+import { sendDueReminders } from '../services/reminderService.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -25,15 +27,30 @@ function isPastDateStr(s) {
   return String(s) < t;
 }
 
+function randomSuffix(len = 6) {
+  return crypto.randomBytes(Math.ceil(len / 2)).toString('hex').slice(0, len).toUpperCase();
+}
+
 async function genBookingNumber(dateStr) {
   const prefix = `AL-${String(dateStr).replace(/-/g, '')}-`;
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const count = await Booking.countDocuments({ bookingNumber: new RegExp(`^${prefix}`) });
-    const candidate = `${prefix}${String(count + 1 + attempt).padStart(3, '0')}`;
-    const exists = await Booking.findOne({ bookingNumber: candidate }).select('_id').lean();
+    const candidate = `${prefix}${randomSuffix(6)}`;
+    const exists = await Booking.exists({ bookingNumber: candidate });
     if (!exists) return candidate;
   }
-  return `${prefix}${Date.now().toString(36).toUpperCase()}`;
+  return `${prefix}${randomSuffix(8)}`;
+}
+
+/** Parse "HH:MM" or "hh:MM AM/PM" into minutes-since-midnight, else null. */
+function slotToMinutes(slot) {
+  const m = String(slot || '').trim().toUpperCase().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
+  if (!m) return null;
+  let hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (m[3] === 'PM' && hh < 12) hh += 12;
+  if (m[3] === 'AM' && hh === 12) hh = 0;
+  if (hh > 23 || mm > 59) return null;
+  return hh * 60 + mm;
 }
 
 function computeCouponDiscount(coupon, amount) {
@@ -109,6 +126,7 @@ export async function createBooking(req, res) {
     service = await Service.findOne({ title: data.serviceTitle }).lean();
   }
   if (!service) throw new HttpError(400, 'Selected service is invalid');
+  if (service.active === false) throw new HttpError(400, 'Selected service is not currently available');
   const serviceTitle = service.title || '';
   const servicePrice = Number(service.price) || 0;
 
@@ -119,6 +137,7 @@ export async function createBooking(req, res) {
     let t = null;
     try { t = await Therapist.findById(therapistId).lean(); } catch { t = null; }
     if (!t) throw new HttpError(400, 'Selected therapist is invalid');
+    if (t.active === false) throw new HttpError(400, 'Selected therapist is not currently available');
     therapistName = t.name || '';
   } else {
     therapistId = 'any';
@@ -131,7 +150,8 @@ export async function createBooking(req, res) {
     throw new HttpError(400, 'Sorry, this time slot is no longer available. Please pick another.');
   }
 
-  // Server-side coupon validation (authoritative, atomic usage increment).
+  // Server-side coupon validation. Usage is only consumed after the booking
+  // is successfully created, so a failed booking never burns a redemption.
   let discountAmount = 0;
   let coupon = null;
   if (data.couponCode) {
@@ -147,15 +167,6 @@ export async function createBooking(req, res) {
       throw new HttpError(400, 'This coupon has reached its usage limit');
     }
     discountAmount = computeCouponDiscount(coupon, servicePrice);
-    const inc = await Coupon.updateOne({ _id: coupon._id, $expr: { $lt: ['$usageCount', '$maxUses'] } }, { $inc: { usageCount: 1 } });
-    // If maxUses set and increment did not match, the coupon just ran out.
-    if (coupon.maxUses && inc.matchedCount === 0 && inc.modifiedCount === 0) {
-      const fresh = await Coupon.findById(coupon._id).lean();
-      if (fresh && Number(fresh.usageCount) >= Number(fresh.maxUses)) {
-        throw new HttpError(400, 'This coupon has reached its usage limit');
-      }
-      await Coupon.updateOne({ _id: coupon._id }, { $inc: { usageCount: 1 } });
-    }
   }
 
   // Server-computed total; client totalPaid is ignored to prevent manipulation.
@@ -163,22 +174,78 @@ export async function createBooking(req, res) {
   const autoApprove = settings.autoApproveBookings !== false;
   const status = autoApprove ? 'confirmed' : 'pending';
 
-  const booking = await Booking.create({
+  // Enforce the configurable daily cap (0/empty = unlimited).
+  const maxDailyBookings = Number(settings.maxDailyBookings) > 0 ? Number(settings.maxDailyBookings) : 0;
+  if (maxDailyBookings > 0) {
+    const bookedToday = await Booking.countDocuments({
+      date: data.date,
+      status: { $nin: ['cancelled', 'rejected'] },
+    });
+    if (bookedToday >= maxDailyBookings) {
+      throw new HttpError(400, 'This date is fully booked. Please choose another day.');
+    }
+  }
+
+  // Duration is always server-derived; never trust the client value. Prefer
+  // the service's own duration and use the global setting only as a fallback.
+  const durationMinutes = Number(service.durationMinutes) > 0
+    ? Number(service.durationMinutes)
+    : Number(settings.bookingDurationMinutes) > 0
+      ? Number(settings.bookingDurationMinutes)
+      : 60;
+
+  const bookingPayload = {
     ...data,
     therapistId,
-    bookingNumber: await genBookingNumber(data.date),
     serviceId: service ? service._id : data.serviceId,
     serviceTitle,
     servicePrice,
     therapistName,
     couponCode: coupon ? coupon.code : '',
-    durationMinutes: data.durationMinutes || (service && service.durationMinutes) || 60,
+    durationMinutes,
     discountAmount,
     totalPaid,
     status,
-    paymentStatus: data.paymentStatus || 'pending',
+    // Payment state is never client-controlled. Only an authenticated admin
+    // action (or a verified gateway webhook, once implemented) may mark paid.
+    paymentStatus: 'pending',
     paymentMethod: data.paymentMethod || 'pay_at_venue',
-  });
+  };
+
+  let booking = null;
+  for (let attempt = 0; attempt < 3 && !booking; attempt += 1) {
+    try {
+      booking = await Booking.create({ ...bookingPayload, bookingNumber: await genBookingNumber(data.date) });
+    } catch (err) {
+      if (err && err.code === 11000 && attempt < 2) continue; // ref collision — retry
+      throw err;
+    }
+  }
+
+  // Compensating capacity check closes the check-then-insert race. Rows are
+  // ordered after insert, so exactly the allowed number survives a burst.
+  const capacity = await enforceNewBookingCapacity(booking._id, data.date, data.timeSlot, therapistId);
+  if (!capacity.ok) {
+    await booking.deleteOne();
+    throw new HttpError(
+      409,
+      capacity.reason === 'therapist_busy'
+        ? 'That therapist was just booked for this slot. Please choose another therapist or time.'
+        : 'That time slot was just booked. Please choose another.'
+    );
+  }
+
+  // Consume coupon usage only once the booking is safely persisted.
+  if (coupon) {
+    const couponFilter = coupon.maxUses
+      ? { _id: coupon._id, $expr: { $lt: ['$usageCount', '$maxUses'] } }
+      : { _id: coupon._id };
+    const inc = await Coupon.updateOne(couponFilter, { $inc: { usageCount: 1 } });
+    if (coupon.maxUses && inc.matchedCount === 0) {
+      await booking.deleteOne();
+      throw new HttpError(400, 'This coupon has reached its usage limit');
+    }
+  }
 
   // Fire-and-forget notifications + email (never block the response).
   createNotification({
@@ -212,24 +279,21 @@ export async function listBookings(req, res) {
 }
 
 export async function lookupBooking(req, res) {
-  const q = String(req.query.q || '').trim();
+  const ref = String(req.query.q || '').trim();
   const email = String(req.query.email || '').trim().toLowerCase();
-  if (!q) throw new HttpError(400, 'Provide a booking reference, email or phone number');
 
-  // Require booking number + email together to prevent single-field enumeration.
-  const looksLikeBookingNo = /^AL-/i.test(q);
-  if (looksLikeBookingNo && !email) {
-    throw new HttpError(400, 'Provide both booking reference and email to look up a booking');
+  // Ownership is ALWAYS proven with a booking reference + matching email pair.
+  // There is deliberately no single-field (email/phone) fallback: that would
+  // let anyone enumerate bookings and then self-service cancel/reschedule them.
+  if (!ref || !email) {
+    throw new HttpError(400, 'Provide both your booking reference and email address');
   }
-  const query = looksLikeBookingNo && email
-    ? { bookingNumber: q, email }
-    : { $or: [{ bookingNumber: q }, { email: q.toLowerCase() }, { phone: q }] };
-  const booking = await Booking.findOne(query).lean();
+  if (!/^AL-/i.test(ref)) {
+    throw new HttpError(400, 'Enter your booking reference (e.g. AL-20260101-ABC123) and email address');
+  }
 
+  const booking = await Booking.findOne({ bookingNumber: ref, email }).lean();
   if (!booking) throw new HttpError(404, 'No booking found');
-  // Full shape is returned because the caller proved ownership (ref + email),
-  // and the self-service modal needs id/details for cancel/reschedule flows.
-  // Enumeration is mitigated by the ref+email gate above plus rate limiting.
   return res.json(serializeBooking(booking));
 }
 
@@ -251,6 +315,25 @@ export async function publicCancelBooking(req, res) {
   if (!['pending', 'confirmed'].includes(booking.status)) {
     throw new HttpError(400, `This booking is already ${booking.status}`);
   }
+
+  // Enforce the configured cancellation notice window.
+  const config = await getSettingsDoc();
+  const noticeHours = Number(config.cancellationNoticeHours) >= 0 ? Number(config.cancellationNoticeHours) : 4;
+  if (noticeHours > 0) {
+    const minutes = slotToMinutes(booking.timeSlot);
+    if (minutes !== null) {
+      const appt = new Date(`${booking.date}T00:00:00`);
+      appt.setMinutes(appt.getMinutes() + minutes);
+      const cutoff = appt.getTime() - noticeHours * 60 * 60 * 1000;
+      if (Date.now() > cutoff) {
+        throw new HttpError(
+          400,
+          `Bookings must be cancelled at least ${noticeHours} hour(s) before the appointment. Please contact us directly.`
+        );
+      }
+    }
+  }
+
   const reason = String((req.body && req.body.reason) || 'Cancelled by client').slice(0, 500);
   booking.status = 'cancelled';
   booking.cancelledAt = new Date();
@@ -301,6 +384,7 @@ export async function publicRescheduleBooking(req, res) {
     let t = null;
     try { t = await Therapist.findById(therapistId).lean(); } catch { t = null; }
     if (!t) throw new HttpError(400, 'Selected therapist is invalid');
+    if (t.active === false) throw new HttpError(400, 'Selected therapist is not currently available');
     therapistName = t.name || '';
   } else {
     therapistId = 'any';
@@ -309,16 +393,37 @@ export async function publicRescheduleBooking(req, res) {
 
   const sameSlot = date === booking.date && timeSlot === booking.timeSlot && String(therapistId) === String(booking.therapistId || 'any');
   if (!sameSlot) {
-    const free = await getAvailableSlots(date, String(therapistId));
+    const free = await getAvailableSlots(date, String(therapistId), booking._id);
     if (!free.includes(timeSlot)) {
       throw new HttpError(400, 'Sorry, this time slot is no longer available. Please pick another.');
     }
   }
+
+  const previous = {
+    date: booking.date,
+    timeSlot: booking.timeSlot,
+    therapistId: booking.therapistId,
+    therapistName: booking.therapistName,
+  };
   booking.date = date;
   booking.timeSlot = timeSlot;
   booking.therapistId = therapistId;
   booking.therapistName = therapistName;
   await booking.save();
+
+  if (!sameSlot) {
+    const capacity = await checkSlotCapacity(date, timeSlot, therapistId, booking._id);
+    if (!capacity.ok) {
+      Object.assign(booking, previous);
+      await booking.save();
+      throw new HttpError(
+        409,
+        capacity.reason === 'therapist_busy'
+          ? 'That therapist was just booked for this slot. Please choose another therapist or time.'
+          : 'That time slot was just booked. Please choose another.'
+      );
+    }
+  }
 
   createNotification({
     type: 'booking',
@@ -349,16 +454,69 @@ export async function updateBooking(req, res) {
   delete data.discountAmount;
   delete data.servicePrice;
   delete data.email;
-  if (data.date && !isValidDateStr(data.date)) throw new HttpError(400, 'Invalid date');
-  if (data.date && data.timeSlot) {
-    const slots = await getAvailableSlots(data.date, String(data.therapistId || booking.therapistId || 'any'));
-    const isSameSlot = data.date === booking.date && data.timeSlot === booking.timeSlot;
-    if (!isSameSlot && !slots.includes(data.timeSlot)) {
+
+  // Payment state is privileged: Receptionists (and any future lower role)
+  // must never be able to mark a booking paid/refunded.
+  if (data.paymentStatus !== undefined && data.paymentStatus !== booking.paymentStatus) {
+    if (!['Super Admin', 'Admin', 'Manager'].includes(req.user.role)) {
+      throw new HttpError(403, 'You do not have permission to change payment status');
+    }
+    if (!['pending', 'completed', 'refunded'].includes(data.paymentStatus)) {
+      throw new HttpError(400, 'Invalid payment status');
+    }
+  }
+
+  const nextDate = data.date !== undefined ? data.date : booking.date;
+  const nextSlot = data.timeSlot !== undefined ? data.timeSlot : booking.timeSlot;
+  const nextTherapist = data.therapistId !== undefined
+    ? String(data.therapistId).trim() || 'any'
+    : String(booking.therapistId || 'any');
+  if (data.therapistId !== undefined) data.therapistId = nextTherapist;
+  const therapistChanged = nextTherapist !== String(booking.therapistId || 'any');
+
+  if (!isValidDateStr(nextDate)) throw new HttpError(400, 'Invalid date');
+
+  if (therapistChanged && nextTherapist !== 'any') {
+    let t = null;
+    try { t = await Therapist.findById(nextTherapist).lean(); } catch { t = null; }
+    if (!t) throw new HttpError(400, 'Selected therapist is invalid');
+    if (t.active === false) throw new HttpError(400, 'Selected therapist is not currently available');
+  }
+
+  const slotChanged = nextDate !== booking.date || nextSlot !== booking.timeSlot || therapistChanged;
+
+  // Revalidate availability whenever the slot or therapist changes. Excluding
+  // this booking prevents it from blocking its own reschedule.
+  if (slotChanged) {
+    const slots = await getAvailableSlots(nextDate, nextTherapist, booking._id);
+    if (!slots.includes(nextSlot)) {
       throw new HttpError(400, 'Requested slot is not available');
     }
   }
+
+  const previous = {
+    date: booking.date,
+    timeSlot: booking.timeSlot,
+    therapistId: booking.therapistId,
+    therapistName: booking.therapistName,
+  };
   Object.assign(booking, data);
   await booking.save();
+
+  // Re-check after the write and roll back on a concurrent overbooking.
+  if (slotChanged && !['cancelled', 'rejected'].includes(booking.status)) {
+    const capacity = await checkSlotCapacity(booking.date, booking.timeSlot, booking.therapistId, booking._id);
+    if (!capacity.ok) {
+      Object.assign(booking, previous);
+      await booking.save();
+      throw new HttpError(
+        409,
+        capacity.reason === 'therapist_busy'
+          ? 'That therapist is already booked for this slot. Please choose another.'
+          : 'That time slot is already full. Please choose another.'
+      );
+    }
+  }
 
   const statusChanged = data.status && data.status !== prevStatus;
   if (statusChanged) {
@@ -409,33 +567,11 @@ export async function sendReminder(req, res) {
 }
 
 export async function triggerReminders(req, res) {
-  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const bookings = await Booking.find({
-    date: tomorrow,
-    status: { $in: ['confirmed', 'pending'] },
-    reminderSentAt: null,
-    email: { $ne: '' },
-  }).lean();
-
-  const settings = await getSettings();
-  let sentCount = 0;
-  for (const b of bookings) {
-    try {
-      const result = await sendBookingReminder(settings, b);
-      if (result.success) {
-        await Booking.updateOne({ _id: b._id }, { $set: { reminderSentAt: new Date() } });
-        sentCount += 1;
-      }
-    } catch {
-      /* continue */
-    }
-  }
-
-  await logAudit({ action: 'reminders', module: 'bookings', details: `Auto-sent ${sentCount} reminders for ${tomorrow}`, req });
+  const { sentCount, failedCount, date } = await sendDueReminders({ req });
   return res.json({
     success: true,
-    message: `${sentCount} reminder${sentCount === 1 ? '' : 's'} sent`,
-    data: { sentCount },
+    message: `${sentCount} reminder${sentCount === 1 ? '' : 's'} sent${failedCount ? `, ${failedCount} failed` : ''}`,
+    data: { sentCount, failedCount, date },
   });
 }
 

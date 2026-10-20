@@ -8,7 +8,8 @@ import {
 import { HttpError } from '../utils/api.js';
 
 export async function getNotifications(req, res) {
-  const { docs, unreadCount } = await listNotifications({ limit: 100 });
+  const userId = req.user && req.user._id;
+  const { docs, unreadCount } = await listNotifications({ userId, limit: 100 });
   return res.json({
     notifications: docs.map(serializeNotification),
     unreadCount,
@@ -16,17 +17,21 @@ export async function getNotifications(req, res) {
 }
 
 export async function markNotificationRead(req, res) {
-  await markRead(req.params.id);
+  const userId = req.user && req.user._id;
+  const { matched } = await markRead(req.params.id, userId);
+  if (!matched) throw new HttpError(404, 'Notification not found');
   return res.json({ success: true });
 }
 
 export async function markAllNotificationsRead(req, res) {
-  const { modifiedCount } = await markAllRead();
+  const userId = req.user && req.user._id;
+  const { modifiedCount } = await markAllRead(userId);
   return res.json({ success: true, modifiedCount });
 }
 
 export async function deleteNotificationItem(req, res) {
-  await deleteNotification(req.params.id);
+  const userId = req.user && req.user._id;
+  await deleteNotification(req.params.id, userId);
   return res.json({ success: true });
 }
 

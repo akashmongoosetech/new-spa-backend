@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import env from '../config/env.js';
+import { HttpError } from '../utils/api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, '../../uploads');
@@ -44,21 +45,51 @@ function fileFilter(req, file, cb) {
   return cb(null, true);
 }
 
-const MAGIC = [
-  { ext: '.jpg', sig: [[0xff, 0xd8, 0xff]] },
-  { ext: '.png', sig: [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]] },
-  { ext: '.gif', sig: [[0x47, 0x49, 0x46, 0x38]] },
-  { ext: '.webp', sig: [[0x52, 0x49, 0x46, 0x46]] },
-];
-
+/**
+ * Verify the actual file signature. A spoofed Content-Type / extension is not
+ * enough: the bytes must match the declared image type.
+ */
 export function isAllowedImageBuffer(buf, ext) {
   if (!buf || buf.length < 12) return false;
   const e = String(ext || '').toLowerCase();
-  if (e === '.jpg' || e === '.jpeg') return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
-  if (e === '.png') return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
-  if (e === '.gif') return buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46;
-  if (e === '.webp') return buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46;
+  const startsWith = (sig) => sig.every((byte, i) => buf[i] === byte);
+
+  if (e === '.jpg' || e === '.jpeg') return startsWith([0xff, 0xd8, 0xff]);
+  if (e === '.png') return startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (e === '.gif') {
+    const gif87a = startsWith([0x47, 0x49, 0x46, 0x38, 0x37, 0x61]);
+    const gif89a = startsWith([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+    return gif87a || gif89a;
+  }
+  if (e === '.webp') {
+    // RIFF....WEBP
+    return startsWith([0x52, 0x49, 0x46, 0x46])
+      && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50;
+  }
   return false;
+}
+
+/**
+ * Validate an uploaded image on disk and remove it if the bytes do not match.
+ * Controllers call this before persisting the file URL.
+ */
+export function validateUploadedImageFile(file) {
+  if (!file || !file.path) {
+    throw new HttpError(400, 'No file uploaded — use multipart/form-data with field "file"');
+  }
+  const ext = path.extname(file.filename || '').toLowerCase();
+  let buf;
+  try {
+    buf = fs.readFileSync(file.path);
+  } catch {
+    try { fs.unlinkSync(file.path); } catch { /* ignore */ }
+    throw new HttpError(400, 'Could not read the uploaded file');
+  }
+  if (!isAllowedImageBuffer(buf, ext)) {
+    try { fs.unlinkSync(file.path); } catch { /* ignore */ }
+    throw new HttpError(400, 'File content does not match its image type');
+  }
+  return true;
 }
 
 export const upload = multer({
@@ -71,7 +102,8 @@ export const upload = multer({
 });
 
 export function publicUrl(filename) {
-  return `${env.uploadPublicUrl}/uploads/${encodeURIComponent(filename)}`;
+  const base = String(env.uploadPublicUrl || '').replace(/\/$/, '');
+  return `${base}/uploads/${encodeURIComponent(filename)}`;
 }
 
 /**

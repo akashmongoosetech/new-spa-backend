@@ -28,7 +28,9 @@ function normalizeBody(body) {
 }
 
 export async function listTherapists(req, res) {
-  const therapists = await Therapist.find().sort({ createdAt: -1 }).limit(500).lean();
+  // Public visitors only see active therapists; staff see everyone.
+  const query = req.user ? {} : { active: true };
+  const therapists = await Therapist.find(query).sort({ createdAt: -1 }).limit(500).lean();
   return res.json(therapists.map(serializeTherapist));
 }
 

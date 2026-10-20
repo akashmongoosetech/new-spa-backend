@@ -35,10 +35,41 @@ function required(name, fallback) {
   return value;
 }
 
+const nodeEnv = process.env.NODE_ENV || 'development';
+const isProduction = nodeEnv === 'production';
+
+// Express `trust proxy`. Accepts: false | true | a hop count | a comma-separated
+// list of trusted proxies/CIDRs. Defaults to 1 hop (a single reverse proxy) to
+// preserve existing deployments. Set TRUST_PROXY=false when the app is exposed
+// directly, otherwise clients can spoof X-Forwarded-For and defeat rate limits.
+function parseTrustProxy(raw) {
+  const value = String(raw == null ? '' : raw).trim();
+  if (value === '') return 1;
+  if (value.toLowerCase() === 'false') return false;
+  if (value.toLowerCase() === 'true') return true;
+  if (/^\d+$/.test(value)) return parseInt(value, 10);
+  return value.split(',').map((part) => part.trim()).filter(Boolean);
+}
+
+const jwtSecret = required('JWT_SECRET');
+
+// Fail fast on insecure/incomplete production configuration.
+if (isProduction) {
+  if (String(jwtSecret).length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters in production');
+  }
+  if (!process.env.UPLOAD_PUBLIC_URL) {
+    throw new Error('UPLOAD_PUBLIC_URL must be set in production (public base URL for uploaded files)');
+  }
+  if (!process.env.CLIENT_URL) {
+    throw new Error('CLIENT_URL must be set in production (used for CORS and password-reset links)');
+  }
+}
+
 export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
-  isProduction: process.env.NODE_ENV === 'production',
-  isDevelopment: process.env.NODE_ENV !== 'production',
+  nodeEnv,
+  isProduction,
+  isDevelopment: !isProduction,
 
   port: parseInt(process.env.PORT || '3000', 10),
 
@@ -46,7 +77,9 @@ export const env = {
 
   dnsServers,
 
-  jwtSecret: required('JWT_SECRET'),
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+
+  jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   resetTokenExpiresIn: process.env.RESET_TOKEN_EXPIRES_IN || '1h',
 
