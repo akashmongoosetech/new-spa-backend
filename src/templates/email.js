@@ -1,7 +1,7 @@
 /**
  * Simple HTML email templates. Each render function takes a context object
  * and returns a full HTML document. Branding colors match the frontend
- * (primary #2CB5A0) and settings drive business info + optional custom bodies.
+ * (primary #BFA476) and settings drive business info + optional custom bodies.
  */
 
 function esc(s) {
@@ -27,7 +27,7 @@ function shell({ settings, title, body }) {
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
         <tr>
-          <td style="background:#2CB5A0;padding:20px 28px;color:#ffffff;">
+          <td style="background:#BFA476;padding:20px 28px;color:#2E2417;">
             <h1 style="margin:0;font-size:20px;">${name}</h1>
             <p style="margin:4px 0 0;font-size:13px;opacity:.9;">${tagline}</p>
           </td>
@@ -83,7 +83,7 @@ export function bookingStatusUpdate(settings, booking) {
   const body = `
     <h2 style="margin:0 0 12px;color:#111827;">Booking ${esc(status)}</h2>
     <p>Dear <strong>${esc(booking.customerName)}</strong>, your appointment <strong>${esc(booking.bookingNumber)}</strong> has been updated to:</p>
-    <p style="font-size:16px;font-weight:600;color:#2CB5A0;">${esc(status)}</p>
+    <p style="font-size:16px;font-weight:600;color:#80663F;">${esc(status)}</p>
     <table role="presentation" width="100%" cellpadding="8" cellspacing="0" style="background:#f9fafb;border-radius:8px;margin:16px 0;">
       <tr><td style="color:#6b7280;width:45%;">Service</td><td>${esc(booking.serviceTitle || '—')}</td></tr>
       <tr><td style="color:#6b7280;">Date</td><td>${esc(fmtDate(booking.date))}</td></tr>
@@ -115,7 +115,7 @@ export function contactThankYou(settings, message) {
     <h2 style="margin:0 0 12px;color:#111827;">Thank you for reaching out</h2>
     <p>Dear <strong>${esc(message.name)}</strong>,</p>
     <p>We've received your message and our concierge team will get back to you within one business day.</p>
-    <p style="color:#6b7280;font-style:italic;border-left:3px solid #2CB5A0;padding-left:12px;">“${esc(message.message)}”</p>
+    <p style="color:#6b7280;font-style:italic;border-left:3px solid #BFA476;padding-left:12px;">“${esc(message.message)}”</p>
     <p>Meanwhile, feel free to call us directly at ${esc(settings.phone || '')}.</p>
   `;
   return shell({ settings, title: `We received your message, ${message.name}`, body });
@@ -123,7 +123,7 @@ export function contactThankYou(settings, message) {
 
 export function newsletterWelcome(settings, subscriber, unsubscribeUrl = '') {
   const unsubscribe = unsubscribeUrl
-    ? `<p style="margin:20px 0 0;color:#6b7280;font-size:12px;">You received this email because you subscribed to our newsletter. <a href="${esc(unsubscribeUrl)}" style="color:#2CB5A0;">Unsubscribe</a>.</p>`
+    ? `<p style="margin:20px 0 0;color:#6b7280;font-size:12px;">You received this email because you subscribed to our newsletter. <a href="${esc(unsubscribeUrl)}" style="color:#80663F;">Unsubscribe</a>.</p>`
     : '';
   const body = `
     <h2 style="margin:0 0 12px;color:#111827;">Welcome aboard!</h2>
@@ -140,7 +140,7 @@ export function passwordReset(settings, resetUrl, expiryLabel = '1 hour') {
     <h2 style="margin:0 0 12px;color:#111827;">Reset your password</h2>
     <p>You requested a password reset for your ${esc(settings.businessName || 'Tripod Wellness')} staff account.</p>
     <p style="margin:24px 0;">
-      <a href="${esc(safeUrl)}" style="background:#2CB5A0;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;">Reset password</a>
+      <a href="${esc(safeUrl)}" style="background:#BFA476;color:#2E2417;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;">Reset password</a>
     </p>
     <p style="color:#6b7280;font-size:13px;">This link expires in ${esc(expiryLabel)}. If you didn't request this, you can safely ignore this email.</p>
   `;
@@ -155,7 +155,7 @@ export function staffApplicationApproved(settings, { name, role, loginUrl }) {
     <p>Your application for <strong>${esc(role)}</strong> access to the ${esc(settings.businessName || 'Tripod Wellness')} admin portal has been approved by the director.</p>
     <p>You can now sign in with the email and password you submitted during registration:</p>
     <p style="margin:24px 0;">
-      <a href="${esc(safeUrl)}" style="background:#2CB5A0;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;">Sign in to the portal</a>
+      <a href="${esc(safeUrl)}" style="background:#BFA476;color:#2E2417;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;">Sign in to the portal</a>
     </p>
     <p>Forgot your password? Use the "Forgot?" link on the sign-in page to reset it.</p>
     <p style="color:#6b7280;font-size:13px;">Questions? Contact the director at ${esc(settings.phone || '')}.</p>
@@ -169,7 +169,7 @@ export function staffApplicationRejected(settings, { name, reason }) {
     <p>Dear <strong>${esc(name)}</strong>,</p>
     <p>Thank you for your interest in joining the ${esc(settings.businessName || 'Tripod Wellness')} team.</p>
     <p>After review, your application for staff portal access could not be approved at this time.</p>
-    ${reason ? `<p style="color:#6b7280;font-style:italic;border-left:3px solid #2CB5A0;padding-left:12px;">${esc(reason)}</p>` : ''}
+    ${reason ? `<p style="color:#6b7280;font-style:italic;border-left:3px solid #BFA476;padding-left:12px;">${esc(reason)}</p>` : ''}
     <p>If you believe this decision was made in error, please reply to this email or contact the director at ${esc(settings.phone || '')}.</p>
   `;
   return shell({ settings, title: 'Update on your staff account application', body });

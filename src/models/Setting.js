@@ -70,7 +70,7 @@ const settingSchema = new mongoose.Schema(
     maxLoginAttempts: { type: Number, default: 5 },
     enable2FA: { type: Boolean, default: false },
 
-    primaryColor: { type: String, default: '#2CB5A0' },
+    primaryColor: { type: String, default: '#BFA476' },
     logoUrl: { type: String, default: '' },
     faviconUrl: { type: String, default: '' },
     heroBannerUrl: { type: String, default: '' },

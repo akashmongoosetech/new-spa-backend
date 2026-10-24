@@ -92,6 +92,9 @@ test('custom email bodies are wrapped in the branded shell', () => {
   assert.equal(html.includes('<!DOCTYPE html>'), true);
   assert.equal(html.includes('Custom body'), true);
   assert.equal(html.includes('Tripod Wellness'), true);
+  assert.equal(html.includes('background:#BFA476'), true);
+  assert.equal(html.includes('color:#2E2417'), true);
+  assert.equal(html.includes('#2CB5A0'), false);
 });
 
 test('legacy logo settings resolve to the hashed brand assets', () => {
@@ -105,6 +108,13 @@ test('legacy logo settings resolve to the hashed brand assets', () => {
 
   const custom = serializeSettings({ logoUrl: 'https://cdn.example.com/custom.png' });
   assert.equal(custom.logoUrl, 'https://cdn.example.com/custom.png');
+});
+
+test('legacy primary colors normalize to the bronze brand palette', () => {
+  assert.equal(serializeSettings({ primaryColor: '#2CB5A0' }).primaryColor, '#BFA476');
+  assert.equal(serializeSettings({ primaryColor: '#259b89' }).primaryColor, '#BFA476');
+  assert.equal(serializeSettings({}).primaryColor, '#BFA476');
+  assert.equal(serializeSettings({ primaryColor: '#123456' }).primaryColor, '#123456');
 });
 
 test('LLM stream concatenates chunks without inserting spaces', async () => {

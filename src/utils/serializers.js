@@ -17,6 +17,14 @@ const id = (v) => (v && v._id ? v._id.toString() : v);
 const LEGACY_BRAND_PATHS = new Set(['/logo.png', '/icon.png']);
 const BRAND_LOGO_PATH = '/brand/tripod-wellness-logo-f1514578.png';
 const BRAND_ICON_PATH = '/brand/tripod-wellness-icon-3af949f8.png';
+const BRAND_PRIMARY_COLOR = '#BFA476';
+const LEGACY_PRIMARY_COLORS = new Set(['#2CB5A0', '#259B89']);
+
+function normalizePrimaryColor(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return BRAND_PRIMARY_COLOR;
+  return LEGACY_PRIMARY_COLORS.has(raw.toUpperCase()) ? BRAND_PRIMARY_COLOR : raw;
+}
 
 function normalizeBrandUrl(value, fallback) {
   const raw = String(value || '').trim();
@@ -438,7 +446,7 @@ export function serializeSettings(s) {
     sessionTimeoutMinutes: s.sessionTimeoutMinutes || 60,
     maxLoginAttempts: s.maxLoginAttempts || 5,
     enable2FA: s.enable2FA || false,
-    primaryColor: s.primaryColor || '#2CB5A0',
+    primaryColor: normalizePrimaryColor(s.primaryColor),
     logoUrl: normalizeBrandUrl(s.logoUrl, BRAND_LOGO_PATH),
     faviconUrl: normalizeBrandUrl(s.faviconUrl, BRAND_ICON_PATH),
     heroBannerUrl: s.heroBannerUrl || '',
