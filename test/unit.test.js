@@ -113,6 +113,7 @@ test('legacy logo settings resolve to the hashed brand assets', () => {
 test('legacy primary colors normalize to the bronze brand palette', () => {
   assert.equal(serializeSettings({ primaryColor: '#2CB5A0' }).primaryColor, '#BFA476');
   assert.equal(serializeSettings({ primaryColor: '#259b89' }).primaryColor, '#BFA476');
+  assert.equal(serializeSettings({ primaryColor: '#DFBD43' }).primaryColor, '#BFA476');
   assert.equal(serializeSettings({}).primaryColor, '#BFA476');
   assert.equal(serializeSettings({ primaryColor: '#123456' }).primaryColor, '#123456');
 });

@@ -18,7 +18,15 @@ const LEGACY_BRAND_PATHS = new Set(['/logo.png', '/icon.png']);
 const BRAND_LOGO_PATH = '/brand/tripod-wellness-logo-f1514578.png';
 const BRAND_ICON_PATH = '/brand/tripod-wellness-icon-3af949f8.png';
 const BRAND_PRIMARY_COLOR = '#BFA476';
-const LEGACY_PRIMARY_COLORS = new Set(['#2CB5A0', '#259B89']);
+const LEGACY_PRIMARY_COLORS = new Set([
+  '#2CB5A0',
+  '#259B89',
+  '#DFBD43',
+  '#C7A36A',
+  '#C5A059',
+  '#D4A341',
+  '#B8832A',
+]);
 
 function normalizePrimaryColor(value) {
   const raw = String(value || '').trim();
