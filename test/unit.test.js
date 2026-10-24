@@ -15,6 +15,7 @@ const {
   newsletterUnsubscribeUrl,
 } = await import('../src/utils/newsletterToken.js');
 const { default: templates } = await import('../src/templates/email.js');
+const { serializeSettings } = await import('../src/utils/serializers.js');
 
 test('image signatures accept real JPEG/PNG/GIF/WebP headers', () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
@@ -91,6 +92,19 @@ test('custom email bodies are wrapped in the branded shell', () => {
   assert.equal(html.includes('<!DOCTYPE html>'), true);
   assert.equal(html.includes('Custom body'), true);
   assert.equal(html.includes('Tripod Wellness'), true);
+});
+
+test('legacy logo settings resolve to the hashed brand assets', () => {
+  const legacy = serializeSettings({
+    businessName: 'Tripod Wellness',
+    logoUrl: '/logo.png',
+    faviconUrl: 'https://tripod.example.com/icon.png',
+  });
+  assert.equal(legacy.logoUrl, '/brand/tripod-wellness-logo-f1514578.png');
+  assert.equal(legacy.faviconUrl, '/brand/tripod-wellness-icon-3af949f8.png');
+
+  const custom = serializeSettings({ logoUrl: 'https://cdn.example.com/custom.png' });
+  assert.equal(custom.logoUrl, 'https://cdn.example.com/custom.png');
 });
 
 test('LLM stream concatenates chunks without inserting spaces', async () => {

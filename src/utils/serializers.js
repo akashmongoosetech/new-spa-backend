@@ -11,6 +11,26 @@ import { bothCase } from './normalize.js';
 
 const id = (v) => (v && v._id ? v._id.toString() : v);
 
+// Settings written by older builds still point at the reusable /logo.png and
+// /icon.png paths. Those URLs cannot be cache-busted, so map them to the
+// current content-hashed brand assets when serializing.
+const LEGACY_BRAND_PATHS = new Set(['/logo.png', '/icon.png']);
+const BRAND_LOGO_PATH = '/brand/tripod-wellness-logo-f1514578.png';
+const BRAND_ICON_PATH = '/brand/tripod-wellness-icon-3af949f8.png';
+
+function normalizeBrandUrl(value, fallback) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    if (LEGACY_BRAND_PATHS.has(new URL(raw, 'https://local.invalid').pathname)) {
+      return fallback;
+    }
+  } catch {
+    return raw;
+  }
+  return raw;
+}
+
 // ---------- AdminUser (mapAdminUser) ----------
 export function serializeAdminUser(u, extra = {}) {
   if (!u) return null;
@@ -419,8 +439,8 @@ export function serializeSettings(s) {
     maxLoginAttempts: s.maxLoginAttempts || 5,
     enable2FA: s.enable2FA || false,
     primaryColor: s.primaryColor || '#2CB5A0',
-    logoUrl: s.logoUrl || '',
-    faviconUrl: s.faviconUrl || '',
+    logoUrl: normalizeBrandUrl(s.logoUrl, BRAND_LOGO_PATH),
+    faviconUrl: normalizeBrandUrl(s.faviconUrl, BRAND_ICON_PATH),
     heroBannerUrl: s.heroBannerUrl || '',
     heroTitle: s.heroTitle || '',
     heroSubtitle: s.heroSubtitle || '',
