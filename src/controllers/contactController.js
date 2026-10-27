@@ -4,8 +4,15 @@ import { HttpError } from '../utils/api.js';
 import { createNotification } from '../services/notificationService.js';
 import { sendContactThankYou, getSettings } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
+import {
+  cleanEmail,
+  cleanSingleLine,
+  cleanText,
+  contactInputSchema,
+  isHoneypotFilled,
+  parseOrThrow,
+} from '../utils/inputValidation.js';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Keep this list in sync with ContactMessage's schema enum.
 const STATUSES = ['new', 'read', 'in_progress', 'replied', 'closed'];
 
@@ -14,21 +21,28 @@ function esc(s) {
 }
 
 export async function createContact(req, res) {
-  const { name, email, phone, subject, message } = req.body || {};
-  if (!name || !String(name).trim() || !email || !message || !String(message).trim()) {
+  if (isHoneypotFilled(req.body)) {
+    // Do not reveal the honeypot or create a record for an automated submission.
+    return res.status(201).json({ success: true });
+  }
+  const body = parseOrThrow(contactInputSchema, req.body || {});
+  const name = cleanSingleLine(body.name, 120);
+  const email = cleanEmail(body.email);
+  const phone = cleanSingleLine(body.phone, 40);
+  const subject = cleanSingleLine(body.subject, 200);
+  const message = cleanText(body.message, 5000);
+
+  if (!name || !email || !message) {
     throw new HttpError(400, 'Name, email and message are required');
   }
-  if (!EMAIL_RE.test(String(email).trim())) throw new HttpError(400, 'Valid email is required');
-  if (String(name).length > 120) throw new HttpError(400, 'Name is too long');
-  if (String(message).length > 5000) throw new HttpError(400, 'Message is too long');
-  if (subject && String(subject).length > 200) throw new HttpError(400, 'Subject is too long');
 
   const contact = await ContactMessage.create({
-    name: String(name).trim().slice(0, 120),
-    email: String(email).toLowerCase().trim(),
-    phone: String(phone || '').slice(0, 40),
-    subject: String(subject || '').slice(0, 200),
-    message: String(message).slice(0, 5000),
+    name,
+    email,
+    phone,
+    subject,
+    message,
+    consentAt: new Date(),
   });
 
   createNotification({

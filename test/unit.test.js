@@ -164,3 +164,51 @@ test('newsletter welcome includes an unsubscribe link when provided', () => {
   assert.equal(html.includes('Unsubscribe'), true);
   assert.equal(html.includes(url.replace(/&/g, '&amp;')), true);
 });
+
+const {
+  cleanSingleLine,
+  cleanText,
+  contactInputSchema,
+  newsletterInputSchema,
+  bookingInputSchema,
+  isHoneypotFilled,
+} = await import('../src/utils/inputValidation.js');
+
+test('plain-text sanitization strips markup and control whitespace', () => {
+  assert.equal(cleanSingleLine('<b>Rahul</b>  Sharma'), 'Rahul Sharma');
+  assert.equal(cleanText('Line one<script>alert(1)</script>\n\n\nLine two'), 'Line one\n\nLine two');
+});
+
+test('contact and newsletter schemas require explicit consent', () => {
+  assert.equal(contactInputSchema.safeParse({ name: 'A', email: 'a@example.com', message: 'Hi' }).success, false);
+  assert.equal(
+    contactInputSchema.safeParse({
+      name: 'A',
+      email: 'a@example.com',
+      message: 'Hi',
+      consent: true,
+    }).success,
+    true
+  );
+  assert.equal(newsletterInputSchema.safeParse({ email: 'a@example.com' }).success, false);
+});
+
+test('booking schema only accepts pay-at-venue and valid dates', () => {
+  const base = {
+    customerName: 'Rahul Sharma',
+    email: 'rahul@example.com',
+    phone: '+91 91716 06807',
+    serviceId: 'service-id',
+    date: '2026-11-10',
+    timeSlot: '10:00',
+    consent: true,
+  };
+  assert.equal(bookingInputSchema.safeParse({ ...base, paymentMethod: 'pay_at_venue' }).success, true);
+  assert.equal(bookingInputSchema.safeParse({ ...base, paymentMethod: 'credit_card' }).success, false);
+  assert.equal(bookingInputSchema.safeParse({ ...base, date: '10-11-2026' }).success, false);
+});
+
+test('honeypot fields are detected without exposing validation details', () => {
+  assert.equal(isHoneypotFilled({ website: 'https://spam.example' }), true);
+  assert.equal(isHoneypotFilled({ website: '' }), false);
+});

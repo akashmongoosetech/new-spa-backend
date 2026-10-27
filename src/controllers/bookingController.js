@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+﻿import crypto from 'crypto';
 import Booking from '../models/Booking.js';
 import Service from '../models/Service.js';
 import Therapist from '../models/Therapist.js';
@@ -11,6 +11,13 @@ import { createNotification } from '../services/notificationService.js';
 import { sendBookingConfirmation, sendBookingStatusUpdate, sendBookingReminder, getSettings } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
 import { sendDueReminders } from '../services/reminderService.js';
+import {
+  bookingInputSchema,
+  cleanSingleLine,
+  cleanText,
+  isHoneypotFilled,
+  parseOrThrow,
+} from '../utils/inputValidation.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -88,22 +95,42 @@ function normalizeBookingBody(b) {
   if (b.totalPaid !== undefined) out.totalPaid = Number(b.totalPaid) || 0;
   if (b.notes !== undefined) out.notes = b.notes;
   if (b.additionalNotes !== undefined) out.notes = b.notes !== undefined ? b.notes : b.additionalNotes;
-  if (b.paymentMethod !== undefined) out.paymentMethod = b.paymentMethod;
+  if (b.paymentMethod !== undefined) out.paymentMethod = 'pay_at_venue';
+  if (b.consent === true) {
+    out.consent = true;
+    out.consentAt = new Date();
+  }
   if (b.paymentStatus !== undefined) out.paymentStatus = b.paymentStatus;
   if (b.status !== undefined) out.status = b.status;
   return out;
 }
 
 export async function createBooking(req, res) {
-  const body = req.body || {};
+  if (isHoneypotFilled(req.body)) {
+    throw new HttpError(400, 'Unable to process this request');
+  }
+  const body = parseOrThrow(bookingInputSchema, req.body || {});
   const data = normalizeBookingBody(body);
+
+  data.customerName = cleanSingleLine(data.customerName, 160);
+  data.email = String(data.email || '').toLowerCase().trim();
+  data.phone = cleanSingleLine(data.phone, 30);
+  data.gender = cleanSingleLine(data.gender, 40);
+  data.notes = cleanText(data.notes, 1000);
+  data.therapistName = cleanSingleLine(data.therapistName, 160);
 
   if (!data.email || !EMAIL_RE.test(String(data.email))) throw new HttpError(400, 'Valid email is required');
   if (!data.phone || String(data.phone).replace(/\D/g, '').length < 7) throw new HttpError(400, 'Valid phone number is required');
-  if (!data.customerName || !String(data.customerName).trim()) throw new HttpError(400, 'Full name is required');
+  if (!data.customerName) throw new HttpError(400, 'Full name is required');
   if (!data.date || !isValidDateStr(data.date)) throw new HttpError(400, 'Valid appointment date (YYYY-MM-DD) is required');
   if (isPastDateStr(data.date)) throw new HttpError(400, 'Appointment date cannot be in the past');
   if (!data.timeSlot || !String(data.timeSlot).trim()) throw new HttpError(400, 'Appointment time is required');
+  if (data.age != null && (!Number.isFinite(Number(data.age)) || Number(data.age) < 18 || Number(data.age) > 120)) {
+    throw new HttpError(400, 'Age must be between 18 and 120');
+  }
+  if (data.consent !== true) {
+    throw new HttpError(400, 'Consent to the Privacy Policy is required');
+  }
 
   const settings = await getSettingsDoc();
   // Honor the configurable booking horizon (default 30 days).
@@ -171,8 +198,9 @@ export async function createBooking(req, res) {
 
   // Server-computed total; client totalPaid is ignored to prevent manipulation.
   const totalPaid = Math.max(0, servicePrice - discountAmount);
-  const autoApprove = settings.autoApproveBookings !== false;
-  const status = autoApprove ? 'confirmed' : 'pending';
+  // A booking submitted online is an appointment request. The concierge
+  // confirms it manually after checking availability, so never auto-confirm.
+  const status = 'pending';
 
   // Enforce the configurable daily cap (0/empty = unlimited).
   const maxDailyBookings = Number(settings.maxDailyBookings) > 0 ? Number(settings.maxDailyBookings) : 0;

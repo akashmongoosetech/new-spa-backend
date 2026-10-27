@@ -95,9 +95,13 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    consentAt: {
+      type: Date,
+      default: null,
+    },
     paymentMethod: {
       type: String,
-      enum: ['pay_at_venue', 'credit_card', 'upi', 'paypal'],
+      enum: ['pay_at_venue'],
       default: 'pay_at_venue',
     },
     paymentStatus: {

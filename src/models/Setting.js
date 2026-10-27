@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 
 const seoSchema = new mongoose.Schema(
   {
@@ -62,7 +62,7 @@ const settingSchema = new mongoose.Schema(
     maxDailyBookings: { type: Number, default: null },
     maxBookingsPerSlot: { type: Number, default: 3, min: 1 },
     slotIntervalMinutes: { type: Number, default: 60, min: 15 },
-    autoApproveBookings: { type: Boolean, default: true },
+    autoApproveBookings: { type: Boolean, default: false },
     advanceBookingDays: { type: Number, default: 30, min: 1 },
     cancellationNoticeHours: { type: Number, default: 4, min: 0 },
 

@@ -43,8 +43,8 @@ export async function submitApplication({ name, email, password, requestedRole, 
   }
 
   const passwordHash = await hashPassword(password);
-  const cleanName = String(name).trim().slice(0, 120);
-  const cleanNote = String(note || '').slice(0, 1000);
+  const cleanName = String(name).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const cleanNote = String(note || '').replace(/<[^>]*>/g, '').trim().slice(0, 1000);
 
   // A rejected applicant may reapply. The unique email index stays intact:
   // reuse the existing record and reset it back to pending.

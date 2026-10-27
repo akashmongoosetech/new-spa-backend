@@ -21,5 +21,7 @@ const chatMessageSchema = new mongoose.Schema(
 );
 
 chatMessageSchema.index({ conversationId: 1, createdAt: 1 });
+// Public chat transcripts expire after 90 days, matching the Conversation TTL.
+chatMessageSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 3600 });
 
 export default mongoose.model('ChatMessage', chatMessageSchema);

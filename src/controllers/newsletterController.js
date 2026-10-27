@@ -5,18 +5,28 @@ import { createNotification } from '../services/notificationService.js';
 import { sendNewsletterWelcome, getSettings } from '../services/emailService.js';
 import { logAudit } from '../services/auditService.js';
 import { verifyNewsletterUnsubscribeToken, newsletterUnsubscribeUrl } from '../utils/newsletterToken.js';
+import {
+  cleanEmail,
+  isHoneypotFilled,
+  newsletterInputSchema,
+  parseOrThrow,
+} from '../utils/inputValidation.js';
 
 export async function subscribe(req, res) {
-  const email = String((req.body && req.body.email) || '').toLowerCase().trim();
-  if (!email) throw new HttpError(400, 'Email is required');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new HttpError(400, 'Please provide a valid email address');
+  if (isHoneypotFilled(req.body)) {
+    return res.status(201).json({ success: true, message: 'Subscribed successfully' });
   }
+  const body = parseOrThrow(newsletterInputSchema, req.body || {});
+  const email = cleanEmail(body.email);
+  if (!email) throw new HttpError(400, 'Email is required');
 
   try {
     const sub = await NewsletterSubscriber.findOneAndUpdate(
       { email },
-      { $setOnInsert: { email }, $set: { active: true } },
+      {
+        $setOnInsert: { email },
+        $set: { active: true, consentAt: new Date() },
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
     if (sub && sub.createdAt && Date.now() - new Date(sub.createdAt).getTime() < 5000) {
@@ -27,7 +37,10 @@ export async function subscribe(req, res) {
     }
   } catch (err) {
     if (err.code === 11000) {
-      await NewsletterSubscriber.updateOne({ email }, { $set: { active: true } });
+      await NewsletterSubscriber.updateOne(
+        { email },
+        { $set: { active: true, consentAt: new Date() } }
+      );
     } else throw err;
   }
 

@@ -8,6 +8,11 @@ import { submitApplication } from './applicationController.js';
 import { sendPasswordReset } from '../services/emailService.js';
 import { createNotification } from '../services/notificationService.js';
 import { logAudit } from '../services/auditService.js';
+import {
+  applicationInputSchema,
+  isHoneypotFilled,
+  parseOrThrow,
+} from '../utils/inputValidation.js';
 import { publicUrl, deleteUploadFile, validateUploadedImageFile } from '../middleware/upload.js';
 import crypto from 'crypto';
 import { HttpError } from '../utils/api.js';
@@ -117,7 +122,11 @@ export async function login(req, res) {
  * here.
  */
 export async function signup(req, res) {
-  const app = await submitApplication(req.body || {});
+  if (isHoneypotFilled(req.body)) {
+    throw new HttpError(400, 'Unable to process this request');
+  }
+  const body = parseOrThrow(applicationInputSchema, req.body || {});
+  const app = await submitApplication(body);
   return res.status(201).json({
     success: true,
     message: 'Application submitted. It will be reviewed by the Super Director.',

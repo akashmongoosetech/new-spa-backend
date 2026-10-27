@@ -39,6 +39,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
+app.disable('x-powered-by');
 app.set('trust proxy', env.trustProxy);
 
 // Uploads are public assets meant to be embedded cross-origin (the frontend
@@ -48,18 +49,23 @@ app.set('trust proxy', env.trustProxy);
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
-    // CSP is report-only until the frontend policy has been validated against
-    // real traffic. Other Helmet headers remain enforced.
     contentSecurityPolicy: {
       useDefaults: true,
-      reportOnly: true,
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
     },
+    referrerPolicy: { policy: 'no-referrer' },
   })
 );
 app.use(corsMiddleware);
 
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+// API requests carry JSON only; uploads use multipart and are size-limited by
+// multer. Keep the JSON surface small so malformed or oversized bodies are
+// rejected before they reach a controller.
+app.use(express.json({ limit: '512kb', strict: true }));
+app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
 if (env.isDevelopment) {
   app.use(morgan('dev'));

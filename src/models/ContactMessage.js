@@ -38,6 +38,10 @@ const contactMessageSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    consentAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

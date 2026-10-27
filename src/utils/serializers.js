@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Response serializers.
  *
  * These produce EXACTLY the shapes the frontend mappers read
@@ -448,7 +448,7 @@ export function serializeSettings(s) {
     maxDailyBookings: s.maxDailyBookings,
     maxBookingsPerSlot: s.maxBookingsPerSlot || 3,
     slotIntervalMinutes: s.slotIntervalMinutes || 60,
-    autoApproveBookings: s.autoApproveBookings !== false,
+    autoApproveBookings: s.autoApproveBookings === true,
     advanceBookingDays: s.advanceBookingDays || 30,
     cancellationNoticeHours: s.cancellationNoticeHours || 4,
     sessionTimeoutMinutes: s.sessionTimeoutMinutes || 60,
