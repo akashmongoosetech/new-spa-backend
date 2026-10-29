@@ -92,7 +92,7 @@ function docToUnits(doc) {
       {
         title: doc.title,
         category: doc.category || 'blog',
-        url: `/blog/${doc.slug || ''}`,
+        url: `/blog/${doc.slug || ''}/`,
         text: `${doc.title}. ${doc.excerpt || doc.summary || ''} ${cleanText(doc.content).slice(0, 1500)}`,
       },
     ];
@@ -114,7 +114,12 @@ async function collectSource(source) {
     return docs.map((d) => ({ ...d, __source: 'faq', _docId: d._id.toString() }));
   }
   if (source === 'blog') {
-    const docs = await Blog.find({ published: true, status: 'active' }).lean();
+    const docs = await Blog.find({
+      $or: [
+        { status: 'published' },
+        { status: 'active', published: true },
+      ],
+    }).lean();
     return docs.map((d) => ({ ...d, __source: 'blog', _docId: d._id.toString() }));
   }
   if (source === 'business') {
@@ -194,9 +199,40 @@ export async function ingestAll() {
   return out;
 }
 
-/** Fire-and-forget hook for create/update/delete controller paths. */
+/**
+ * Fire-and-forget hook for create/update/delete controller paths.
+ *
+ * Refreshes are serialized per source and coalesced. Without this, two rapid
+ * saves could finish out of order and leave the vector index showing content
+ * that has since been unpublished or deleted.
+ */
+const refreshStates = new Map();
+
 export function refreshSource(source) {
-  ingestSource(source).catch((err) => logger.error('rag', `Auto-refresh failed for ${source}`, err));
+  const key = String(source || '');
+  const existing = refreshStates.get(key);
+  if (existing) {
+    existing.pending = true;
+    return existing.promise;
+  }
+
+  const state = { pending: false, promise: null };
+  const promise = (async () => {
+    do {
+      state.pending = false;
+      try {
+        await ingestSource(key);
+      } catch (err) {
+        logger.error('rag', `Auto-refresh failed for ${key}`, err);
+      }
+    } while (state.pending);
+  })().finally(() => {
+    if (refreshStates.get(key) === state) refreshStates.delete(key);
+  });
+
+  state.promise = promise;
+  refreshStates.set(key, state);
+  return promise;
 }
 
 export async function sourceStats() {

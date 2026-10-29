@@ -206,8 +206,10 @@ export function serializeTestimonial(t) {
   );
 }
 
-// ---------- Blog (mapBlogPost reads snake_case) ----------
+// ---------- Blog (new + legacy clients read either case) ----------
 import { generateExcerptHtml, getExcerptLength } from './htmlTruncate.js';
+import { sanitizeHtml, extractText } from './sanitize.js';
+import { resolveBlogSeo } from './blogSeo.js';
 
 function readTimeDisplay(v) {
   if (v == null) return '';
@@ -217,43 +219,138 @@ function readTimeDisplay(v) {
   return s;
 }
 
-export function serializeBlogPost(b) {
+function blogStatus(b) {
+  if (b.status === 'published' || b.status === 'draft' || b.status === 'unpublished') return b.status;
+  if (b.status === 'inactive') return 'unpublished';
+  return b.published === false || b.published === 0 ? 'draft' : 'published';
+}
+
+function nestedSeo(seo = {}) {
+  return {
+    meta_title: seo.metaTitle || '',
+    metaTitle: seo.metaTitle || '',
+    meta_description: seo.metaDescription || '',
+    metaDescription: seo.metaDescription || '',
+    canonical_url: seo.canonicalUrl || '',
+    canonicalUrl: seo.canonicalUrl || '',
+    og_title: seo.ogTitle || '',
+    ogTitle: seo.ogTitle || '',
+    og_description: seo.ogDescription || '',
+    ogDescription: seo.ogDescription || '',
+    og_image_url: seo.ogImageUrl || '',
+    ogImageUrl: seo.ogImageUrl || '',
+    twitter_title: seo.twitterTitle || '',
+    twitterTitle: seo.twitterTitle || '',
+    twitter_description: seo.twitterDescription || '',
+    twitterDescription: seo.twitterDescription || '',
+    twitter_image_url: seo.twitterImageUrl || '',
+    twitterImageUrl: seo.twitterImageUrl || '',
+    keywords: Array.isArray(seo.keywords) ? seo.keywords : [],
+  };
+}
+
+export function serializeBlogPost(b, options = {}) {
   if (!b) return null;
-  
-  const excerptHtml = b.excerpt ? generateExcerptHtml(b.excerpt, getExcerptLength()) : '';
-  const safeExcerpt = b.excerpt ? generateExcerptHtml(b.excerpt, getExcerptLength()).replace(/<[^>]*>/g, '') : '';
-  
-  return bothCase(
-    {
-      id: id(b),
-      title: b.title,
-      slug: b.slug,
-      category: b.category,
-      author: b.author,
-      therapistName: b.therapistName || '',
-      therapistAvatarUrl: b.therapistAvatarUrl || '',
-      date: b.date || b.createdAt || b.created_at,
-      read_time: readTimeDisplay(b.readTime),
-      excerpt: b.excerpt || b.summary || '',
-      excerpt_html: excerptHtml,
-      safe_excerpt: safeExcerpt,
-      content: b.content,
-      image_url: b.imageUrl || b.cover_image || '',
-      cover_image: b.imageUrl || b.cover_image || '',
-      tags: b.tags || [],
-      published: b.published === false || b.published === 0 ? 0 : 1,
-      status: b.status || 'active',
-      feature_on_home_page: b.featureOnHomePage ? 1 : 0,
-      seo: {
-        meta_title: b.seo?.metaTitle || '',
-        meta_description: b.seo?.metaDescription || '',
-        keywords: b.seo?.keywords || [],
-      },
-      created_at: b.createdAt || b.created_at,
-      updated_at: b.updatedAt || b.updated_at,
-    },
-    ['id', 'title', 'slug', 'category', 'author', 'therapistName', 'therapistAvatarUrl', 'date', 'read_time', 'excerpt', 'excerpt_html', 'safe_excerpt', 'content', 'image_url', 'cover_image', 'tags', 'published', 'status', 'feature_on_home_page', 'seo', 'created_at', 'updated_at']
-  );
+  const status = blogStatus(b);
+  const published = status === 'published';
+  const content = sanitizeHtml(b.content || '');
+  const excerpt = sanitizeHtml(b.excerpt || b.summary || '');
+  const excerptText = extractText(b.excerptText || excerpt || content).slice(0, 1000);
+  const featuredImageUrl = b.featuredImageUrl || b.imageUrl || b.coverImage || '';
+  const featuredImageAlt = b.featuredImageAlt || '';
+  const readingTime = parseInt(b.readingTime || b.readTime || 1, 10) || 1;
+  const sections = (Array.isArray(b.sections) ? b.sections : [])
+    .slice()
+    .sort((a, c) => Number(a.order || 0) - Number(c.order || 0))
+    .map((section, index) => ({
+      id: section.id || `${b.slug || 'section'}-${index + 1}`,
+      heading: section.heading || '',
+      content: sanitizeHtml(section.content || ''),
+      order: Number.isFinite(Number(section.order)) ? Number(section.order) : index,
+    }));
+  const seo = nestedSeo(b.seo || {});
+  const resolvedSeo = resolveBlogSeo({
+    ...b,
+    status,
+    published,
+    excerptText,
+    featuredImageUrl,
+    featuredImageAlt,
+  });
+  const resolvedSeoBoth = {
+    ...bothCase(resolvedSeo, [
+      'title', 'description', 'canonicalUrl', 'robots', 'type', 'ogTitle',
+      'ogDescription', 'ogImageUrl', 'ogImageAlt', 'twitterTitle',
+      'twitterDescription', 'twitterImageUrl', 'twitterCard', 'keywords',
+      'section', 'author', 'publishedAt', 'updatedAt',
+    ]),
+  };
+
+  const core = {
+    id: id(b),
+    title: b.title,
+    slug: b.slug,
+    category: b.category || '',
+    categoryId: b.categoryId ? b.categoryId.toString() : '',
+    author: b.author || '',
+    therapistName: b.therapistName || '',
+    therapistAvatarUrl: b.therapistAvatarUrl || '',
+    date: b.publishedAt || b.date || b.createdAt || b.created_at,
+    publishedAt: b.publishedAt || b.date || null,
+    readTime: readTimeDisplay(readingTime),
+    readingTime,
+    excerpt,
+    excerptHtml: excerpt ? generateExcerptHtml(excerpt, getExcerptLength()) : '',
+    excerptText,
+    summary: excerptText,
+    content,
+    featuredImageUrl,
+    featuredImageAlt,
+    imageUrl: featuredImageUrl,
+    coverImage: featuredImageUrl,
+    tags: Array.isArray(b.tags) ? b.tags : [],
+    published,
+    status,
+    isFeatured: Boolean(b.isFeatured || b.featureOnHomePage),
+    featureOnHomePage: Boolean(b.isFeatured || b.featureOnHomePage),
+    sections,
+    seo,
+    resolvedSeo: resolvedSeoBoth,
+    previousSlugs: b.previousSlugs || [],
+    createdBy: b.createdBy ? b.createdBy.toString() : '',
+    updatedBy: b.updatedBy ? b.updatedBy.toString() : '',
+    created_at: b.createdAt || b.created_at,
+    updated_at: b.updatedAt || b.updated_at,
+  };
+
+  const out = bothCase(core, [
+    'id', 'title', 'slug', 'category', 'categoryId', 'author', 'therapistName',
+    'therapistAvatarUrl', 'date', 'publishedAt', 'readTime', 'readingTime',
+    'excerpt', 'excerptHtml', 'excerptText', 'summary', 'content',
+    'featuredImageUrl', 'featuredImageAlt', 'imageUrl', 'coverImage', 'tags',
+    'published', 'status', 'isFeatured', 'featureOnHomePage', 'sections', 'seo',
+    'resolvedSeo', 'previousSlugs', 'createdBy', 'updatedBy', 'created_at', 'updated_at',
+  ]);
+
+  // Historically the API exposed these exact snake_case aliases. Keep them so
+  // older clients and the current static generator continue to work.
+  out.excerpt_html = core.excerptHtml;
+  out.safe_excerpt = excerptText;
+  out.read_time = core.readTime;
+  out.image_url = featuredImageUrl;
+  out.cover_image = featuredImageUrl;
+  out.feature_on_home_page = core.isFeatured ? 1 : 0;
+  out.featured_image_url = featuredImageUrl;
+  out.featured_image_alt = featuredImageAlt;
+  out.published_at = core.publishedAt;
+  out.reading_time = readingTime;
+  out.is_featured = core.isFeatured;
+  out.category_id = core.categoryId;
+  out.previous_slugs = core.previousSlugs;
+  out.resolved_seo = resolvedSeoBoth;
+  if (options.redirectTo) out.redirectTo = options.redirectTo;
+
+  return out;
 }
 
 // ---------- Gallery (raw, render tolerates image_url || imageUrl) ----------

@@ -85,6 +85,22 @@ export const env = {
 
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
 
+  // Public site base used for canonicals, share URLs and structured data.
+  // Never derive this from an untrusted Host header.
+  siteUrl: (
+    process.env.SITE_URL ||
+    process.env.PUBLIC_SITE_URL ||
+    String(process.env.CLIENT_URL || '').split(',')[0].trim() ||
+    'http://localhost:5173'
+  ).replace(/\/+$/, ''),
+
+  blogReadingWpm: Math.max(100, Math.min(400, parseInt(process.env.BLOG_READING_WPM || '220', 10) || 220)),
+
+  blogCanonicalHosts: (process.env.BLOG_CANONICAL_HOSTS || '')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean),
+
   smtp: {
     host: process.env.SMTP_HOST || '',
     port: parseInt(process.env.SMTP_PORT || '587', 10),

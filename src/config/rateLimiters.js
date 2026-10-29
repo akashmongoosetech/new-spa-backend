@@ -100,3 +100,21 @@ export const ragAdminLimiter = limiter({
   max: 60,
   message: 'Too many RAG admin requests. Please try again later.',
 });
+
+export const blogReadLimiter = limiter({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: 'Too many blog requests. Please try again shortly.',
+});
+
+export const blogSitemapLimiter = limiter({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: 'Too many sitemap requests. Please try again shortly.',
+});
+
+export const blogWriteLimiter = limiter({
+  windowMs: 60 * 60 * 1000,
+  max: 180,
+  message: 'Too many blog changes. Please try again later.',
+});

@@ -15,7 +15,9 @@
     "ingest": "node scripts/ingest.js",
     "check": "node scripts/check-syntax.js",
     "test": "node --test test/unit.test.js",
-    "backfill:excerpts": "node scripts/backfillExcerpts.js"
+    "test:blog": "node --test test/blog.integration.test.js",
+    "backfill:excerpts": "node scripts/backfillExcerpts.js",
+    "blog:migrate": "node scripts/migrate-blogs.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
