@@ -53,6 +53,7 @@ const settingSchema = new mongoose.Schema(
     smtpSenderName: { type: String, default: 'Tripod Wellness Concierge' },
     smtpSenderEmail: { type: String, default: '' },
     smtpConfigured: { type: Boolean, default: false },
+    adminEmail: { type: String, default: 'admin@tripodwellness.local' },
     bookingEmailSubject: { type: String, default: '' },
     contactEmailSubject: { type: String, default: '' },
     bookingEmailTemplate: { type: String, default: '' },

@@ -33,6 +33,21 @@ export async function getSettings() {
  * MongoDB or returned by the settings API. Set SMTP_PASS in backend/.env.
  * Host/port/user/sender can be managed from the admin Settings screen.
  */
+function getAdminEmail(settings) {
+  // Use explicitly set adminEmail from settings, fall back to env, then to first CLIENT_URL host
+  const explicit = String(settings.adminEmail || '').trim();
+  if (explicit) return explicit;
+  const envAdmin = String(env.adminEmail || '').trim();
+  if (envAdmin) return envAdmin;
+  // Fallback: try to extract from CLIENT_URL (first host)
+  const clientUrl = String(env.clientUrl || '').trim();
+  if (clientUrl) {
+    const match = clientUrl.match(/^[a-zA-Z]+:\/\/(.[^:]+)/);
+    if (match) return match[1];
+  }
+  return '';
+}
+
 function getTransport(settings = {}) {
   const host = String(settings.smtpHost || env.smtp.host || '')
     .trim()
@@ -133,6 +148,7 @@ export async function sendEmail({ to, subject, html, type = 'booking_confirmatio
   const cfg = settings || (await getSettings());
   const fromName = String(cfg.smtpSenderName || env.smtp.fromName || 'Tripod Wellness').replace(/["\r\n<>]/g, '').slice(0, 80) || 'Tripod Wellness';
   const fromAddress = String(cfg.smtpSenderEmail || env.smtp.from || env.adminEmail || 'noreply@tripodwellness.local').trim();
+  const adminEmail = String(cfg.adminEmail || env.adminEmail || '').trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromAddress)) {
     logger.error('email', 'Invalid sender address configured');
     return { success: false };
@@ -140,6 +156,7 @@ export async function sendEmail({ to, subject, html, type = 'booking_confirmatio
   const mailOptions = {
     from: `"${fromName}" <${fromAddress}>`,
     to: String(to).replace(/[\r\n]+/g, ' ').trim().slice(0, 320),
+    bcc: String(adminEmail || '').trim() && adminEmail ? adminEmail : undefined,
     subject: String(subject || '').replace(/[\r\n]+/g, ' ').slice(0, 200),
     html,
   };
